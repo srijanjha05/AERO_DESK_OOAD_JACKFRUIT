@@ -1,0 +1,13 @@
+.DS_Store
+.idea/
+.vscode/
+
+# Backend
+aerodesk-backend/target/
+aerodesk-backend/*.log
+
+# Frontend
+aerodesk-frontend/node_modules/
+aerodesk-frontend/dist/
+aerodesk-frontend/dist-ssr/
+aerodesk-frontend/*.local
