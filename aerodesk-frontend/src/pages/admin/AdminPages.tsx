@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from 'recharts';
 import { FileClock, LineChart, ShieldCheck } from 'lucide-react';
+import { motion, Variants } from 'framer-motion';
 import { api } from '@/lib/api';
 import { PortalShell } from '@/components/layout/PortalShell';
 import { Button } from '@/components/ui/button';
@@ -18,50 +19,89 @@ const nav = [
   { to: '/admin/users', label: 'Users' },
 ];
 
+const containerParams: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.15 } }
+};
+
+const itemParams: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
+};
+
 export function AdminDashboardPage() {
   const revenueQuery = useQuery({ queryKey: ['admin-revenue'], queryFn: async () => (await api.get<Array<Record<string, string | number>>>('/admin/reports/revenue')).data });
   const occupancyQuery = useQuery({ queryKey: ['admin-occupancy'], queryFn: async () => (await api.get<Array<Record<string, string | number>>>('/admin/reports/occupancy')).data });
   const punctualityQuery = useQuery({ queryKey: ['admin-punctuality'], queryFn: async () => (await api.get<Array<Record<string, string | number>>>('/admin/reports/punctuality')).data });
 
+  const PIE_COLORS = ['#06b6d4', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+
   return (
     <PortalShell title="Executive Dashboard" subtitle="CEO oversight" items={nav} mode="sidebar">
-      <div className="grid gap-6 lg:grid-cols-3">
-        <AdminTile title="Revenue" value={`${revenueQuery.data?.length ?? 0} metrics`} icon={<LineChart className="h-5 w-5 text-cyan-200" />} />
-        <AdminTile title="Audit readiness" value="Live" icon={<FileClock className="h-5 w-5 text-cyan-200" />} />
-        <AdminTile title="User governance" value="RBAC" icon={<ShieldCheck className="h-5 w-5 text-cyan-200" />} />
-      </div>
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <ChartCard title="Revenue">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={revenueQuery.data ?? []}>
-              <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-              <XAxis dataKey="metric" stroke="rgba(255,255,255,0.55)" />
-              <YAxis stroke="rgba(255,255,255,0.55)" />
-              <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 18 }} />
-              <Area dataKey="amount" stroke="#06b6d4" fill="rgba(6,182,212,0.25)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </ChartCard>
-        <ChartCard title="Occupancy">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={occupancyQuery.data ?? []}>
-              <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-              <XAxis dataKey="route" stroke="rgba(255,255,255,0.55)" />
-              <YAxis stroke="rgba(255,255,255,0.55)" />
-              <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 18 }} />
-              <Bar dataKey="occupancy" fill="#3b82f6" radius={[10, 10, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-        <ChartCard title="Punctuality">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={punctualityQuery.data ?? []} dataKey="count" nameKey="status" outerRadius={90} fill="#06b6d4" />
-              <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 18 }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </ChartCard>
-      </div>
+      <motion.div variants={containerParams} initial="hidden" animate="show" className="space-y-6">
+        <div className="grid gap-6 lg:grid-cols-3">
+          <motion.div variants={itemParams}><AdminTile title="Revenue" value={`${revenueQuery.data?.length ?? 0} metrics`} icon={<LineChart className="h-5 w-5 text-cyan-200" />} /></motion.div>
+          <motion.div variants={itemParams}><AdminTile title="Audit readiness" value="Live" icon={<FileClock className="h-5 w-5 text-cyan-200" />} /></motion.div>
+          <motion.div variants={itemParams}><AdminTile title="User governance" value="RBAC" icon={<ShieldCheck className="h-5 w-5 text-cyan-200" />} /></motion.div>
+        </div>
+        
+        <div className="grid gap-6 xl:grid-cols-3">
+          <motion.div variants={itemParams} className="xl:col-span-2">
+            <ChartCard title="Revenue Flow">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={revenueQuery.data ?? []}>
+                  <defs>
+                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <XAxis dataKey="metric" stroke="rgba(255,255,255,0.55)" tickLine={false} axisLine={false} />
+                  <YAxis stroke="rgba(255,255,255,0.55)" tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val/1000}k`} />
+                  <Tooltip contentStyle={{ background: '#091327', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }} itemStyle={{ color: '#67e8f9' }} />
+                  <Area type="monotone" dataKey="amount" stroke="#06b6d4" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </motion.div>
+
+          <motion.div variants={itemParams}>
+            <ChartCard title="Punctuality Report">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={punctualityQuery.data ?? []} dataKey="count" nameKey="status" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5}>
+                    {(punctualityQuery.data ?? []).map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: '#091327', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </motion.div>
+
+          <motion.div variants={itemParams} className="xl:col-span-3">
+            <ChartCard title="Occupancy Rates per Route">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={occupancyQuery.data ?? []} barSize={40}>
+                  <defs>
+                    <linearGradient id="colorOccupancy" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.8}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="route" stroke="rgba(255,255,255,0.55)" tickLine={false} axisLine={false} />
+                  <YAxis stroke="rgba(255,255,255,0.55)" tickLine={false} axisLine={false} tickFormatter={(val) => `${val}%`} />
+                  <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ background: '#091327', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12 }} />
+                  <Bar dataKey="occupancy" fill="url(#colorOccupancy)" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </motion.div>
+        </div>
+      </motion.div>
     </PortalShell>
   );
 }
@@ -86,6 +126,7 @@ export function AdminAuditLogsPage() {
                 <th className="px-6 py-4">Action</th>
                 <th className="px-6 py-4">Entity</th>
                 <th className="px-6 py-4">User</th>
+                <th className="px-6 py-4">Outcome</th>
                 <th className="px-6 py-4">Timestamp</th>
               </tr>
             </thead>
@@ -95,6 +136,15 @@ export function AdminAuditLogsPage() {
                   <td className="px-6 py-4">{log.action}</td>
                   <td className="px-6 py-4">{log.entityType} #{log.entityId}</td>
                   <td className="px-6 py-4">{log.user?.email}</td>
+                  <td className="px-6 py-4">
+                    {log.outcome ? (
+                      <span className={`rounded-full px-3 py-1 text-xs ${log.outcome === 'SUCCESS' ? 'bg-emerald-400/10 text-emerald-400' : 'bg-red-400/10 text-red-400'}`}>
+                        {log.outcome}
+                      </span>
+                    ) : (
+                      <span className="text-white/40">SYSTEM</span>
+                    )}
+                  </td>
                   <td className="px-6 py-4">{new Date(log.timestamp).toLocaleString()}</td>
                 </tr>
               ))}

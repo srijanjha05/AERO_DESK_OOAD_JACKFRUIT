@@ -100,6 +100,7 @@ export interface AuditLog {
   entityId: string;
   timestamp: string;
   ipAddress: string;
+  outcome?: string;
   user: User;
 }
 

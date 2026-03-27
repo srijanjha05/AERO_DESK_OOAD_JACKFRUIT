@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS ad_flights (
     departure_time DATETIME NOT NULL,
     arrival_time DATETIME NOT NULL,
     status ENUM('SCHEDULED','DELAYED','CANCELLED','BOARDING','DEPARTED','ARRIVED') NOT NULL,
+    status_reason VARCHAR(500),
     price DECIMAL(10,2) NOT NULL,
     aircraft_id BIGINT NOT NULL,
     PRIMARY KEY (flight_id),
@@ -301,6 +302,7 @@ CREATE TABLE IF NOT EXISTS ad_audit_logs (
     entity_id VARCHAR(100) NOT NULL,
     timestamp DATETIME NOT NULL,
     ip_address VARCHAR(50),
+    outcome VARCHAR(50),
     PRIMARY KEY (log_id),
     KEY idx_ad_audit_logs_user_id (user_id),
     KEY idx_ad_audit_logs_entity_type (entity_type),
@@ -335,6 +337,23 @@ CREATE TABLE IF NOT EXISTS ad_seat_holds (
         ON UPDATE CASCADE,
     CONSTRAINT fk_ad_seat_holds_passenger
         FOREIGN KEY (passenger_id) REFERENCES ad_users(user_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS ad_invoices (
+    invoice_id BIGINT NOT NULL AUTO_INCREMENT,
+    invoice_number VARCHAR(50) NOT NULL,
+    booking_id BIGINT NOT NULL,
+    base_fare DECIMAL(10,2) NOT NULL,
+    tax_amount DECIMAL(10,2) NOT NULL,
+    total_amount DECIMAL(10,2) NOT NULL,
+    issued_at DATETIME NOT NULL,
+    PRIMARY KEY (invoice_id),
+    UNIQUE KEY uk_ad_invoices_invoice_number (invoice_number),
+    UNIQUE KEY uk_ad_invoices_booking_id (booking_id),
+    CONSTRAINT fk_ad_invoices_booking
+        FOREIGN KEY (booking_id) REFERENCES ad_bookings(booking_id)
         ON DELETE CASCADE
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -78,26 +78,42 @@ export function EmployeePassengerProfilePage() {
 }
 
 export function EmployeeBookingAssistPage() {
-  const [flightId, setFlightId] = useState('');
-  const [passengerId, setPassengerId] = useState('');
-  const [seatIds, setSeatIds] = useState('');
+  const [form, setForm] = useState({
+    flightId: '', passengerId: '', seatIds: '',
+    travelerName: '', travelerEmail: '', travelerPhone: '',
+    travelerGender: 'MALE', travelerDateOfBirth: '',
+  });
+
   const bookingMutation = useMutation({
     mutationFn: async () => (await api.post<Booking>('/admin/bookings', {
-      flightId: Number(flightId),
-      passengerId: Number(passengerId),
-      seatIds: seatIds.split(',').map((value) => Number(value.trim())).filter(Boolean),
+      flightId: Number(form.flightId),
+      passengerId: Number(form.passengerId),
+      seatIds: form.seatIds.split(',').map((value) => Number(value.trim())).filter(Boolean),
+      travelerName: form.travelerName,
+      travelerEmail: form.travelerEmail,
+      travelerPhone: form.travelerPhone,
+      travelerGender: form.travelerGender,
+      travelerDateOfBirth: form.travelerDateOfBirth,
     })).data,
   });
 
   return (
     <PortalShell title="Assisted Booking" subtitle="Front desk operations" items={nav} mode="sidebar">
-      <Card className="max-w-3xl border-white/10 bg-white/8 text-white backdrop-blur-xl">
+      <Card className="max-w-4xl border-white/10 bg-white/8 text-white backdrop-blur-xl">
         <CardHeader><CardTitle>Create booking for passenger</CardTitle></CardHeader>
         <CardContent className="grid gap-4 p-6 md:grid-cols-2">
-          <Field label="Passenger ID"><Input value={passengerId} onChange={(event) => setPassengerId(event.target.value)} className="border-white/12 bg-white/5 text-white" /></Field>
-          <Field label="Flight ID"><Input value={flightId} onChange={(event) => setFlightId(event.target.value)} className="border-white/12 bg-white/5 text-white" /></Field>
-          <Field label="Seat IDs comma-separated"><Input value={seatIds} onChange={(event) => setSeatIds(event.target.value)} className="border-white/12 bg-white/5 text-white" /></Field>
-          <div className="flex items-end"><Button className="w-full" onClick={() => bookingMutation.mutate()}>Create booking</Button></div>
+          <Field label="Passenger ID"><Input value={form.passengerId} onChange={(event) => setForm({ ...form, passengerId: event.target.value })} className="border-white/12 bg-white/5" /></Field>
+          <Field label="Flight ID"><Input value={form.flightId} onChange={(event) => setForm({ ...form, flightId: event.target.value })} className="border-white/12 bg-white/5" /></Field>
+          <Field label="Seat IDs (comma-separated)"><Input value={form.seatIds} onChange={(event) => setForm({ ...form, seatIds: event.target.value })} className="border-white/12 bg-white/5" /></Field>
+          <div className="hidden md:block" />
+          <Field label="Traveler Name"><Input value={form.travelerName} onChange={(event) => setForm({ ...form, travelerName: event.target.value })} className="border-white/12 bg-white/5" /></Field>
+          <Field label="Traveler Email"><Input type="email" value={form.travelerEmail} onChange={(event) => setForm({ ...form, travelerEmail: event.target.value })} className="border-white/12 bg-white/5" /></Field>
+          <Field label="Traveler Phone"><Input value={form.travelerPhone} onChange={(event) => setForm({ ...form, travelerPhone: event.target.value })} className="border-white/12 bg-white/5" /></Field>
+          <Field label="Gender (MALE/FEMALE)"><Input value={form.travelerGender} onChange={(event) => setForm({ ...form, travelerGender: event.target.value })} className="border-white/12 bg-white/5" /></Field>
+          <Field label="Date of Birth"><Input type="date" value={form.travelerDateOfBirth} onChange={(event) => setForm({ ...form, travelerDateOfBirth: event.target.value })} className="border-white/12 bg-white/5" /></Field>
+          
+          <div className="md:col-span-2 flex items-end mt-4"><Button className="w-full" onClick={() => bookingMutation.mutate()}>Create booking</Button></div>
+          {bookingMutation.isError ? <div className="md:col-span-2 text-red-400 font-semibold p-4 bg-red-400/10 rounded-2xl border border-red-400/20">{(bookingMutation.error as any)?.response?.data?.error || 'Error creating booking. Verify inputs.'}</div> : null}
           {bookingMutation.data ? <div className="md:col-span-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">Booking created. ID {bookingMutation.data.id}, PNR {bookingMutation.data.pnrCode}</div> : null}
         </CardContent>
       </Card>

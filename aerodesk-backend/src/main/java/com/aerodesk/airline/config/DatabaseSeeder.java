@@ -102,18 +102,22 @@ public class DatabaseSeeder {
         AirportManager manager = airportManagerRepository.findAll().stream().findFirst().orElseThrow();
 
         List<Aircraft> aircrafts = new ArrayList<>(aircraftRepository.findAll());
-        for (int i = aircrafts.size(); i < 3; i++) {
-            try {
-                AircraftRequest req = new AircraftRequest();
-                req.setModel("Airbus A32" + i);
-                req.setRegistrationNumber("VT-AD" + i);
-                req.setTotalSeats(180);
-                req.setEconomySeats(150);
-                req.setBusinessSeats(20);
-                req.setFirstClassSeats(10);
-                aircrafts.add(managerService.createAircraft(req, manager.getId()));
-            } catch (RuntimeException ignored) {
-                aircraftRepository.findByRegistrationNumber("VT-AD" + i).ifPresent(aircrafts::add);
+        if (aircrafts.isEmpty() || aircrafts.size() < 3) {
+            String[] models = {"Air India Boeing 777", "IndiGo Airbus A320", "Vistara Boeing 737"};
+            String[] regs = {"VT-AI1", "VT-6E2", "VT-UK3"};
+            for (int i = 0; i < 3; i++) {
+                try {
+                    AircraftRequest req = new AircraftRequest();
+                    req.setModel(models[i]);
+                    req.setRegistrationNumber(regs[i]);
+                    req.setTotalSeats(180);
+                    req.setEconomySeats(150);
+                    req.setBusinessSeats(20);
+                    req.setFirstClassSeats(10);
+                    aircrafts.add(managerService.createAircraft(req, manager.getId()));
+                } catch (RuntimeException ignored) {
+                    aircraftRepository.findByRegistrationNumber(regs[i]).ifPresent(aircrafts::add);
+                }
             }
         }
 
@@ -141,7 +145,9 @@ public class DatabaseSeeder {
 
             BigDecimal price = BigDecimal.valueOf(4200 + ((i % 12) * 450L));
 
-            String flightNumber = "AD-" + (1000 + existingFlights + i);
+            String[] prefixes = {"AI", "6E", "UK"};
+            String prefix = prefixes[i % 3];
+            String flightNumber = prefix + "-" + (100 + existingFlights + i);
             if (flightRepository.findAll().stream().anyMatch(flight -> flightNumber.equalsIgnoreCase(flight.getFlightNumber()))) {
                 continue;
             }

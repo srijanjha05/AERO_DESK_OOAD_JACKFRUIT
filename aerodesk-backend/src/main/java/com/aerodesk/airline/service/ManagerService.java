@@ -58,6 +58,9 @@ public class ManagerService {
         });
 
         int totalRequestedSeats = defaultValue(request.getEconomySeats()) + defaultValue(request.getBusinessSeats()) + defaultValue(request.getFirstClassSeats());
+        if (request.getTotalSeats() <= 0) {
+            throw new RuntimeException("Aircraft must have a capacity greater than 0");
+        }
         if (!request.getTotalSeats().equals(totalRequestedSeats)) {
             throw new RuntimeException("Seat class totals must equal total seats");
         }
@@ -79,6 +82,14 @@ public class ManagerService {
 
     @Transactional
     public Flight createFlight(FlightRequest request, Long actingUserId) {
+        if (flightRepository.existsByAircraftIdAndDepartureTimeLessThanAndArrivalTimeGreaterThan(
+                request.getAircraftId(), request.getArrivalTime(), request.getDepartureTime())) {
+            throw new RuntimeException("Aircraft is already scheduled for a flight during this time window");
+        }
+        if (request.getArrivalTime().isBefore(request.getDepartureTime())) {
+            throw new RuntimeException("Arrival time cannot be before departure time");
+        }
+
         Flight flight = new Flight();
         flight.setFlightNumber(request.getFlightNumber());
         flight.setOriginAirport(airportRepository.findById(request.getOriginAirportId()).orElseThrow());
@@ -95,6 +106,14 @@ public class ManagerService {
 
     @Transactional
     public Flight updateFlight(Long id, FlightRequest request, Long actingUserId) {
+        if (flightRepository.existsByAircraftIdAndDepartureTimeLessThanAndArrivalTimeGreaterThanAndIdNot(
+                request.getAircraftId(), request.getArrivalTime(), request.getDepartureTime(), id)) {
+            throw new RuntimeException("Aircraft is already scheduled for a flight during this time window");
+        }
+        if (request.getArrivalTime().isBefore(request.getDepartureTime())) {
+            throw new RuntimeException("Arrival time cannot be before departure time");
+        }
+
         Flight flight = flightRepository.findById(id).orElseThrow();
         flight.setFlightNumber(request.getFlightNumber());
         flight.setOriginAirport(airportRepository.findById(request.getOriginAirportId()).orElseThrow());
@@ -109,9 +128,12 @@ public class ManagerService {
     }
 
     @Transactional
-    public Flight updateFlightStatus(Long id, String status, Long actingUserId) {
+    public Flight updateFlightStatus(Long id, String status, String reason, Long actingUserId) {
         Flight flight = flightRepository.findById(id).orElseThrow();
         flight.setStatus(FlightStatus.valueOf(status.toUpperCase()));
+        if (reason != null && !reason.isBlank()) {
+            flight.setStatusReason(reason);
+        }
         Flight saved = flightRepository.save(flight);
 
         if (saved.getStatus() == FlightStatus.CANCELLED) {

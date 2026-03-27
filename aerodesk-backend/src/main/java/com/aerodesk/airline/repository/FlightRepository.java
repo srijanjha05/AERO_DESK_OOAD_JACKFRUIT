@@ -18,4 +18,6 @@ public interface FlightRepository extends JpaRepository<Flight, Long>, JpaSpecif
 
     List<Flight> findByDepartureTimeBetween(LocalDateTime start, LocalDateTime end);
     long countByStatus(FlightStatus status);
+    boolean existsByAircraftIdAndDepartureTimeLessThanAndArrivalTimeGreaterThan(Long aircraftId, LocalDateTime newArrival, LocalDateTime newDeparture);
+    boolean existsByAircraftIdAndDepartureTimeLessThanAndArrivalTimeGreaterThanAndIdNot(Long aircraftId, LocalDateTime newArrival, LocalDateTime newDeparture, Long id);
 }

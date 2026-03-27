@@ -17,6 +17,10 @@ public class AuditService {
     private final UserRepository userRepository;
 
     public void log(Long userId, String action, String entityType, String entityId, String ipAddress) {
+        log(userId, action, entityType, entityId, ipAddress, "SUCCESS");
+    }
+
+    public void log(Long userId, String action, String entityType, String entityId, String ipAddress, String outcome) {
         if (userId == null) {
             return;
         }
@@ -33,6 +37,7 @@ public class AuditService {
         log.setEntityId(entityId);
         log.setTimestamp(LocalDateTime.now());
         log.setIpAddress(ipAddress == null ? "SYSTEM" : ipAddress);
+        log.setOutcome(outcome);
         auditLogRepository.save(log);
     }
 }

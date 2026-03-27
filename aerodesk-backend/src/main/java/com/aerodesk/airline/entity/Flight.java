@@ -46,4 +46,15 @@ public class Flight {
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "aircraft_id", nullable = false)
     private Aircraft aircraft;
+
+    @Column(name = "status_reason", length = 500)
+    private String statusReason;
+
+    @Transient
+    public Long getDurationMinutes() {
+        if (departureTime != null && arrivalTime != null) {
+            return java.time.Duration.between(departureTime, arrivalTime).toMinutes();
+        }
+        return 0L;
+    }
 }

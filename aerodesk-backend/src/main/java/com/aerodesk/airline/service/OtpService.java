@@ -20,6 +20,11 @@ public class OtpService {
     private int otpExpiryMinutes;
 
     public String generateOtp(User user) {
+        long recentCount = otpRepository.countByUserIdAndExpiresAtAfter(user.getId(), LocalDateTime.now());
+        if (recentCount >= 3) {
+            throw new RuntimeException("OTP rate limit exceeded. Please wait fully before requesting again.");
+        }
+
         String otpCode = String.format("%06d", new Random().nextInt(999999));
         
         Otp otp = new Otp();

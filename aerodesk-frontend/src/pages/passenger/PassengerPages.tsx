@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { ArrowRight, Bell, CheckCircle2, Clock3, CreditCard, Download, Plane, PlaneLanding, Search, Ticket, Wallet } from 'lucide-react';
+import { ArrowRight, Bell, CheckCircle2, Clock3, CreditCard, Download, Plane, PlaneLanding, Search, Ticket, Wallet, Loader2, ShieldCheck, CreditCardIcon } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { api } from '@/lib/api';
 import { getBookingDraft, setBookingDraft } from '@/lib/bookingDraft';
 import { Button } from '@/components/ui/button';
@@ -171,12 +174,29 @@ export function SeatSelectionPage() {
   });
 
   const flight = (location.state as { flight?: Flight } | null)?.flight ?? getBookingDraft()?.flight;
+  
   const grouped = useMemo(() => {
     const seats = flightQuery.data ?? [];
-    return ['FIRST', 'BUSINESS', 'ECONOMY'].map((classType) => ({
-      classType,
-      seats: seats.filter((seat) => seat.classType === classType),
-    }));
+    return ['FIRST', 'BUSINESS', 'ECONOMY'].map((classType) => {
+      const classSeats = seats.filter((seat) => seat.classType === classType);
+      
+      const rowsMap = new Map<number, Seat[]>();
+      classSeats.forEach(seat => {
+        const rowNumStr = seat.seatNumber.replace(/\D/g, ''); 
+        const rowNum = parseInt(rowNumStr, 10) || 0;
+        if (!rowsMap.has(rowNum)) rowsMap.set(rowNum, []);
+        rowsMap.get(rowNum)!.push(seat);
+      });
+      
+      const sortedRows = Array.from(rowsMap.keys()).sort((a,b)=>a-b);
+      const rowData = sortedRows.map(rNum => {
+         const rowSeats = rowsMap.get(rNum)!;
+         rowSeats.sort((a,b) => a.seatNumber.localeCompare(b.seatNumber));
+         return { rowNum: rNum, seats: rowSeats };
+      });
+      
+      return { classType, rows: rowData, total: classSeats.length };
+    });
   }, [flightQuery.data]);
 
   const totalAmount = (flight?.price ?? 0) * selected.length;
@@ -188,49 +208,53 @@ export function SeatSelectionPage() {
 
   return (
     <PortalShell title="Seat Map" subtitle="Traveler workspace" items={passengerNav} mode="topbar">
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
         <Card className="border-white/10 bg-white/8 text-white backdrop-blur-xl">
-          <CardHeader><CardTitle>Interactive seat selection</CardTitle></CardHeader>
-          <CardContent className="space-y-8">
-            {grouped.map((group) => (
-              <div key={group.classType}>
-                <div className="mb-4 flex items-center justify-between">
-                  <div className="text-lg font-semibold">{group.classType}</div>
-                  <div className="text-sm text-white/60">{group.seats.length} seats</div>
+          <CardHeader><CardTitle>Interactive Airplane Map</CardTitle></CardHeader>
+          <CardContent className="flex flex-col items-center">
+            {/* Nose of the plane */}
+            <div className="mb-4 h-24 w-48 rounded-t-[5rem] bg-white/5 border-t border-l border-r border-white/10" />
+            
+            <div className="w-full max-w-md bg-white/5 rounded-3xl p-6 border border-white/10 shadow-2xl">
+              {grouped.map((group) => (group.total > 0 && (
+                <div key={group.classType} className="mb-12">
+                  <div className="mb-6 flex items-center justify-between border-b border-white/10 pb-2">
+                    <div className="text-sm font-semibold tracking-widest text-cyan-200">{group.classType}</div>
+                  </div>
+                  <div className="space-y-4">
+                    {group.rows.map(row => {
+                       const mid = Math.ceil(row.seats.length / 2);
+                       const leftBlock = row.seats.slice(0, mid);
+                       const rightBlock = row.seats.slice(mid);
+                       return (
+                         <div key={row.rowNum} className="flex items-center justify-center gap-6">
+                           <div className="flex gap-2">
+                             {leftBlock.map(seat => <SeatNode key={seat.id} seat={seat} selected={selected} toggle={toggleSeat} />)}
+                           </div>
+                           <div className="w-8 text-center text-xs font-bold text-white/40">{row.rowNum}</div>
+                           <div className="flex gap-2">
+                             {rightBlock.map(seat => <SeatNode key={seat.id} seat={seat} selected={selected} toggle={toggleSeat} />)}
+                           </div>
+                         </div>
+                       )
+                    })}
+                  </div>
                 </div>
-                <div className="grid grid-cols-6 gap-3">
-                  {group.seats.map((seat) => {
-                    const isSelected = selected.some((item) => item.id === seat.id);
-                    const className = !seat.isAvailable
-                      ? 'bg-rose-500/25 text-rose-100 border-rose-400/30'
-                      : isSelected
-                        ? 'bg-blue-500 text-white border-blue-300'
-                        : 'bg-emerald-500/20 text-emerald-100 border-emerald-400/30';
-                    return (
-                      <button
-                        key={seat.id}
-                        type="button"
-                        className={`rounded-2xl border px-3 py-4 text-sm transition hover:scale-[1.02] ${className}`}
-                        onClick={() => toggleSeat(seat)}
-                      >
-                        {seat.seatNumber}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+              )))}
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-white/10 bg-white/8 text-white backdrop-blur-xl">
+        <Card className="border-white/10 bg-white/8 text-white backdrop-blur-xl h-fit sticky top-24">
           <CardHeader><CardTitle>Selection summary</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <Summary label="Flight" value={flight?.flightNumber ?? 'Selected route'} />
             <Summary label="Seats" value={selected.length ? selected.map((seat) => seat.seatNumber).join(', ') : 'None'} />
             <Summary label="Price" value={`₹${totalAmount || 0}`} />
-            <div className="rounded-2xl border border-white/10 bg-[#091327] p-4 text-sm text-white/65">
-              Green seats are available, red seats are unavailable, blue seats are selected for this booking draft.
+            <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4 text-sm text-blue-200">
+              <div className="flex items-center gap-2 mb-2"><div className="w-4 h-4 rounded-md bg-white/10 border border-white/20"/> Available</div>
+              <div className="flex items-center gap-2 mb-2"><div className="w-4 h-4 rounded-md bg-rose-500/30 border border-rose-400/50"/> Unavailable</div>
+              <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-md bg-cyan-400 border border-cyan-300"/> Selected</div>
             </div>
             <Button
               className="w-full"
@@ -247,6 +271,27 @@ export function SeatSelectionPage() {
         </Card>
       </div>
     </PortalShell>
+  );
+}
+
+function SeatNode({ seat, selected, toggle }: { seat: Seat; selected: Seat[]; toggle: (s:Seat)=>void }) {
+  const isSelected = selected.some((item) => item.id === seat.id);
+  const className = !seat.isAvailable
+    ? 'bg-rose-500/30 text-rose-100 border-rose-400/50 cursor-not-allowed opacity-50'
+    : isSelected
+      ? 'bg-cyan-500 text-white border-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.5)]'
+      : 'bg-white/10 text-white border-white/20 hover:bg-white/20 hover:border-white/40 cursor-pointer';
+
+  return (
+    <motion.button
+      whileHover={seat.isAvailable ? { scale: 1.1 } : {}}
+      whileTap={seat.isAvailable ? { scale: 0.95 } : {}}
+      type="button"
+      className={`relative w-12 h-14 rounded-t-xl rounded-b-md border flex items-center justify-center text-xs font-semibold transition-colors ${className}`}
+      onClick={() => toggle(seat)}
+    >
+      {seat.seatNumber}
+    </motion.button>
   );
 }
 
@@ -366,6 +411,10 @@ export function BookingConfirmPage() {
 export function BookingPaymentPage() {
   const navigate = useNavigate();
   const draft = getBookingDraft();
+  const [activeMethod, setActiveMethod] = useState<'CARD' | 'UPI' | 'CASH' | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [success, setSuccess] = useState(false);
+
   const paymentMutation = useMutation({
     mutationFn: async (paymentMethod: 'CARD' | 'UPI' | 'CASH') => {
       if (!draft?.bookingId || !draft.totalAmount) throw new Error('Missing booking');
@@ -377,27 +426,91 @@ export function BookingPaymentPage() {
     onSuccess: () => navigate('/booking/success'),
   });
 
+  const handlePay = async () => {
+    if (!activeMethod) return;
+    setIsProcessing(true);
+    // Simulate gateway delay
+    await new Promise((r) => setTimeout(r, 2000));
+    setSuccess(true);
+    await new Promise((r) => setTimeout(r, 800));
+    paymentMutation.mutate(activeMethod);
+  };
+
   return (
-    <PortalShell title="Payment" subtitle="Traveler workspace" items={passengerNav} mode="topbar">
-      <div className="grid gap-6 lg:grid-cols-3">
-        {[
-          { key: 'CARD', title: 'Card', icon: <CreditCard className="h-5 w-5 text-cyan-200" /> },
-          { key: 'UPI', title: 'UPI', icon: <Wallet className="h-5 w-5 text-cyan-200" /> },
-          { key: 'CASH', title: 'Cash', icon: <Ticket className="h-5 w-5 text-cyan-200" /> },
-        ].map((method) => (
-          <Card key={method.key} className="border-white/10 bg-white/8 text-white backdrop-blur-xl">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="text-xl font-semibold">{method.title}</div>
-                {method.icon}
-              </div>
-              <div className="mt-4 text-sm text-white/65">Demo payment mode. This will mark the booking as paid and confirmed.</div>
-              <Button className="mt-6 w-full" onClick={() => paymentMutation.mutate(method.key as 'CARD' | 'UPI' | 'CASH')}>
-                Pay ₹{draft?.totalAmount ?? 0}
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+    <PortalShell title="Payment Gateway" subtitle="Secure terminal" items={passengerNav} mode="topbar">
+      <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="space-y-6">
+          <h2 className="text-2xl font-semibold">Select Payment Method</h2>
+          <div className="grid gap-4">
+            {[
+              { key: 'CARD', title: 'Credit / Debit Card', icon: <CreditCard className="h-5 w-5 text-cyan-200" />, desc: 'Visa, Mastercard, Amex' },
+              { key: 'UPI', title: 'UPI AutoPay', icon: <Wallet className="h-5 w-5 text-emerald-200" />, desc: 'Google Pay, PhonePe, Paytm' },
+              { key: 'CASH', title: 'Cash Counter', icon: <Ticket className="h-5 w-5 text-amber-200" />, desc: 'Pay at the airport terminal' },
+            ].map((method) => {
+              const isActive = activeMethod === method.key;
+              return (
+                <motion.div
+                  key={method.key}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={() => !isProcessing && setActiveMethod(method.key as any)}
+                  className={`cursor-pointer rounded-2xl border p-5 transition-all ${isActive ? 'border-cyan-400 bg-cyan-400/10 shadow-[0_0_20px_rgba(34,211,238,0.15)]' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="rounded-full bg-white/5 p-3">{method.icon}</div>
+                      <div>
+                        <div className="font-semibold text-lg">{method.title}</div>
+                        <div className="text-sm text-white/50">{method.desc}</div>
+                      </div>
+                    </div>
+                    <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center ${isActive ? 'border-cyan-400' : 'border-white/20'}`}>
+                      {isActive && <div className="h-3 w-3 rounded-full bg-cyan-400" />}
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+
+        <Card className="border-white/10 bg-white/5 text-white backdrop-blur-3xl h-fit border-t border-t-white/20 shadow-2xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-emerald-400"/> Order Summary</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex justify-between items-center text-lg pb-4 border-b border-white/10">
+               <span className="text-white/70">Total Amount</span>
+               <span className="text-3xl font-bold bg-gradient-to-r from-cyan-300 to-blue-300 bg-clip-text text-transparent">₹{draft?.totalAmount?.toLocaleString() ?? 0}</span>
+            </div>
+            
+            <AnimatePresence mode="popLayout">
+              {activeMethod === 'CARD' && (
+                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
+                  <Field label="Card Number"><Input placeholder="0000 0000 0000 0000" className="bg-black/50 border-white/10 font-mono tracking-widest" disabled={isProcessing}/></Field>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="Expiry Date"><Input placeholder="MM/YY" className="bg-black/50 border-white/10" disabled={isProcessing}/></Field>
+                    <Field label="CVV"><Input placeholder="123" type="password" className="bg-black/50 border-white/10" disabled={isProcessing}/></Field>
+                  </div>
+                  <Field label="Cardholder Name"><Input placeholder="John Doe" className="bg-black/50 border-white/10" disabled={isProcessing}/></Field>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <Button 
+              className={`w-full h-14 text-lg font-semibold tracking-wide transition-all ${isProcessing ? 'pointer-events-none' : ''} ${success ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-cyan-600 hover:bg-cyan-500'}`} 
+              onClick={handlePay}
+              disabled={!activeMethod || paymentMutation.isPending || isProcessing}
+            >
+              {isProcessing && !success && <Loader2 className="w-5 h-5 mr-3 animate-spin"/>}
+              {success && <CheckCircle2 className="w-5 h-5 mr-3"/>}
+              {success ? 'Payment Successful' : isProcessing ? 'Processing Securely...' : `Pay ₹${draft?.totalAmount?.toLocaleString() ?? 0}`}
+            </Button>
+            <p className="text-center text-xs text-white/40 pt-4 flex items-center justify-center gap-2">
+              <CreditCardIcon className="w-4 h-4" /> 256-bit AES Encryption
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </PortalShell>
   );
@@ -553,6 +666,9 @@ export function CheckInPage() {
 export function BoardingPassPage() {
   const params = useParams();
   const checkInId = Number(params.id);
+  const pdfRef = useRef<HTMLDivElement>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
   const query = useQuery({
     queryKey: ['boarding-pass', checkInId],
     queryFn: async () => (await api.get<BoardingPass>(`/boarding-pass/${checkInId}`)).data,
@@ -560,30 +676,89 @@ export function BoardingPassPage() {
 
   const pass = query.data;
 
+  const handleDownloadPdf = async () => {
+    if (!pdfRef.current || !pass) return;
+    try {
+      setIsExporting(true);
+      const canvas = await html2canvas(pdfRef.current, { scale: 3, useCORS: true, backgroundColor: '#091327' });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [210, 99] });
+      pdf.addImage(imgData, 'PNG', 0, 0, 210, 99);
+      pdf.save(`BoardingPass_${pass.checkIn.booking.pnrCode}.pdf`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <PortalShell title="Boarding Pass" subtitle="Traveler workspace" items={passengerNav} mode="topbar">
       {!pass ? <PlaceholderCard label="Loading boarding pass..." /> : (
-        <Card className="mx-auto max-w-3xl border-white/10 bg-white/8 text-white backdrop-blur-xl print:shadow-none">
-          <CardContent className="p-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm uppercase tracking-[0.35em] text-cyan-200/70">AeroDesk boarding pass</div>
-                <div className="mt-2 text-4xl font-semibold">{pass.checkIn.booking.flight.originAirport.code} → {pass.checkIn.booking.flight.destinationAirport.code}</div>
-              </div>
-              <PlaneLanding className="h-8 w-8 text-cyan-200" />
+        <div className="max-w-4xl mx-auto space-y-8">
+          <div ref={pdfRef} className="rounded-3xl border border-white/20 bg-gradient-to-br from-[#0B152A] to-[#0A0F1E] text-white overflow-hidden shadow-2xl flex">
+            <div className="flex-[3] p-8 border-r border-dashed border-white/20 relative">
+               <div className="absolute top-0 right-[-10px] w-5 h-5 rounded-full bg-[#0A0F1E] border border-white/20 transform -translate-y-1/2" />
+               <div className="absolute bottom-0 right-[-10px] w-5 h-5 rounded-full bg-[#0A0F1E] border border-white/20 transform translate-y-1/2" />
+               
+               <div className="flex justify-between items-start border-b border-white/10 pb-6">
+                 <div>
+                   <h1 className="text-2xl font-bold tracking-widest text-cyan-400 flex items-center gap-3"><Plane className="w-6 h-6"/>AERODESK</h1>
+                   <p className="text-xs uppercase tracking-[0.3em] text-white/50 mt-1">First Class Boarding Pass</p>
+                 </div>
+                 <div className="text-right">
+                   <p className="text-xs uppercase tracking-widest text-white/50">Flight No.</p>
+                   <p className="text-2xl font-mono text-white mt-1">{pass.checkIn.booking.flight.flightNumber}</p>
+                 </div>
+               </div>
+               
+               <div className="py-8 flex items-center justify-between">
+                 <div className="w-1/3">
+                    <p className="text-5xl font-bold">{pass.checkIn.booking.flight.originAirport.code}</p>
+                    <p className="text-sm text-white/50 mt-2">{pass.checkIn.booking.flight.originAirport.city}</p>
+                 </div>
+                 <div className="flex-1 flex flex-col items-center">
+                    <PlaneLanding className="w-8 h-8 text-cyan-400/50" />
+                    <div className="w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-400/30 to-transparent mt-2"/>
+                    <p className="text-xs text-white/40 mt-2">Duration: 2h 20m</p>
+                 </div>
+                 <div className="w-1/3 text-right">
+                    <p className="text-5xl font-bold">{pass.checkIn.booking.flight.destinationAirport.code}</p>
+                    <p className="text-sm text-white/50 mt-2">{pass.checkIn.booking.flight.destinationAirport.city}</p>
+                 </div>
+               </div>
+
+               <div className="grid grid-cols-4 gap-6 bg-white/5 rounded-2xl p-5 border border-white/5">
+                 <div><p className="text-xs text-white/50 uppercase">Passenger</p><p className="font-semibold truncate">{pass.checkIn.booking.travelerName}</p></div>
+                 <div><p className="text-xs text-white/50 uppercase">Date</p><p className="font-semibold truncate">{new Date(pass.checkIn.booking.flight.departureTime).toLocaleDateString()}</p></div>
+                 <div><p className="text-xs text-white/50 uppercase">Time</p><p className="font-semibold">{new Date(pass.boardingTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p></div>
+                 <div><p className="text-xs text-white/50 uppercase">Gate</p><p className="font-semibold text-cyan-400">{pass.gate}</p></div>
+               </div>
             </div>
-            <div className="mt-8 grid gap-4 md:grid-cols-2">
-              <Summary label="PNR" value={pass.checkIn.booking.pnrCode} />
-              <Summary label="Gate" value={pass.gate} />
-              <Summary label="Boarding time" value={new Date(pass.boardingTime).toLocaleString()} />
-              <Summary label="Barcode data" value={pass.barcodeData.slice(0, 24)} />
+
+            <div className="flex-[1] bg-cyan-950/20 p-8 flex flex-col justify-between items-center text-center">
+               <div className="w-full">
+                 <p className="text-xs uppercase tracking-widest text-cyan-400/70">PNR Code</p>
+                 <p className="text-2xl font-mono mt-1 mb-8">{pass.checkIn.booking.pnrCode}</p>
+               </div>
+               <div className="my-auto w-full flex flex-col items-center">
+                 <div className="flex w-full h-20 items-stretch justify-center opacity-80 mix-blend-screen overflow-hidden gap-[1px]">
+                    {Array.from({length: 40}).map((_, i) => (
+                       <div key={i} className={`bg-white h-full ${i%2===0 ? 'w-1' : (i%5===0 ? 'w-2' : 'w-[2px]')}`} style={{ opacity: Math.sin(checkInId * i) > 0 ? 1 : 0 }} />
+                    ))}
+                 </div>
+                 <p className="text-[10px] uppercase tracking-[0.4em] font-mono mt-3 text-white/40">{pass.barcodeData.substring(0, 16)}</p>
+               </div>
+               <div className="w-full text-left mt-8">
+                 <p className="text-xs text-white/50 uppercase">Seat</p>
+                 <p className="text-xl font-bold">{pass.checkIn.booking.seats.map(s => s.seatNumber).join(', ')}</p>
+               </div>
             </div>
-            <Button className="mt-8 w-full" onClick={() => window.print()}>
-              <Download className="mr-2 h-4 w-4" />
-              Print boarding pass
-            </Button>
-          </CardContent>
-        </Card>
+          </div>
+
+          <Button className="w-full py-6 text-lg font-semibold" onClick={handleDownloadPdf} disabled={isExporting}>
+             {isExporting ? <Loader2 className="w-5 h-5 mr-3 animate-spin"/> : <Download className="w-5 h-5 mr-3"/>}
+             {isExporting ? 'Generating PDF...' : 'Download Official PDF Pass'}
+          </Button>
+        </div>
       )}
     </PortalShell>
   );

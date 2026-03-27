@@ -8,4 +8,5 @@ import java.util.Optional;
 
 public interface OtpRepository extends JpaRepository<Otp, Long> {
     Optional<Otp> findByUserIdAndOtpCodeAndIsUsedFalseAndExpiresAtAfter(Long userId, String otpCode, LocalDateTime now);
+    long countByUserIdAndExpiresAtAfter(Long userId, LocalDateTime now);
 }

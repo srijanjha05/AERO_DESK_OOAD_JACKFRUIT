@@ -6,6 +6,7 @@ import com.aerodesk.airline.entity.BoardingPass;
 import com.aerodesk.airline.entity.Booking;
 import com.aerodesk.airline.entity.CheckIn;
 import com.aerodesk.airline.entity.Flight;
+import com.aerodesk.airline.entity.Invoice;
 import com.aerodesk.airline.entity.Passenger;
 import com.aerodesk.airline.entity.Payment;
 import com.aerodesk.airline.entity.Refund;
@@ -59,6 +60,7 @@ public class BookingService {
     private final RefundRepository refundRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final com.aerodesk.airline.repository.InvoiceRepository invoiceRepository;
 
     @Value("${seat.hold.minutes}")
     private int seatHoldMinutes;
@@ -191,6 +193,16 @@ public class BookingService {
                 seatHoldRepository.save(hold);
             });
         }
+
+        Invoice invoice = new Invoice();
+        invoice.setBooking(booking);
+        invoice.setInvoiceNumber("INV-" + booking.getPnrCode() + "-" + LocalDate.now().toString().replace("-", ""));
+        invoice.setTotalAmount(booking.getTotalAmount());
+        BigDecimal tax = booking.getTotalAmount().multiply(new BigDecimal("0.18")).setScale(2, RoundingMode.HALF_UP);
+        invoice.setTaxAmount(tax);
+        invoice.setBaseFare(booking.getTotalAmount().subtract(tax));
+        invoice.setIssuedAt(LocalDateTime.now());
+        invoiceRepository.save(invoice);
 
         auditService.log(actingUserId, "PAYMENT_SUCCESS", "PAYMENT", payment.getId().toString(), "SYSTEM");
         return payment;

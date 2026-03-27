@@ -49,7 +49,7 @@ export function ManagerFlightsPage() {
   };
 
   const statusMutation = useMutation({
-    mutationFn: async ({ flightId, status }: { flightId: number; status: string }) => (await api.patch(`/manager/flights/${flightId}/status`, { status })).data,
+    mutationFn: async ({ flightId, status, reason }: { flightId: number; status: string; reason?: string }) => (await api.patch(`/manager/flights/${flightId}/status`, { status, reason })).data,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['manager-refunds'] });
       await loadFlights();
@@ -82,7 +82,13 @@ export function ManagerFlightsPage() {
                     key={status}
                     variant="outline"
                     className="border-white/15 bg-white/5 text-white hover:bg-white/10"
-                    onClick={() => statusMutation.mutate({ flightId: flight.id, status })}
+                    onClick={() => {
+                      let reason = '';
+                      if (status === 'DELAYED' || status === 'CANCELLED') {
+                        reason = window.prompt(`Enter context/reason for marking flight as ${status}:`) || '';
+                      }
+                      statusMutation.mutate({ flightId: flight.id, status, reason });
+                    }}
                   >
                     {status}
                   </Button>
@@ -107,14 +113,29 @@ export function ManagerFlightCreatePage() {
     aircraftId: '',
   });
   const mutation = useMutation({
-    mutationFn: async () => (await api.post('/manager/flights', {
-      ...form,
-      originAirportId: Number(form.originAirportId),
-      destinationAirportId: Number(form.destinationAirportId),
-      aircraftId: Number(form.aircraftId),
-      price: Number(form.price),
-    })).data,
+    mutationFn: async () => {
+      let dep = form.departureTime;
+      if (dep && dep.length === 16) dep += ':00';
+      let arr = form.arrivalTime;
+      if (arr && arr.length === 16) arr += ':00';
+
+      return (await api.post('/manager/flights', {
+        ...form,
+        originAirportId: Number(form.originAirportId),
+        destinationAirportId: Number(form.destinationAirportId),
+        aircraftId: Number(form.aircraftId),
+        price: Number(form.price),
+        departureTime: dep,
+        arrivalTime: arr,
+      })).data;
+    }
   });
+
+  const getError = () => {
+    if (!mutation.isError) return '';
+    const m = mutation.error as any;
+    return m?.response?.data?.error || m?.response?.data?.message || m?.message || 'Failed to schedule flight. Check inputs.';
+  };
 
   return (
     <PortalShell title="Schedule Flight" subtitle="Operations control" items={nav} mode="sidebar">
@@ -132,7 +153,8 @@ export function ManagerFlightCreatePage() {
         values={form}
         onChange={setForm}
         onSubmit={() => mutation.mutate()}
-        success={mutation.isSuccess ? 'Flight created.' : ''}
+        success={mutation.isSuccess ? 'Flight created explicitly.' : ''}
+        error={getError()}
       />
     </PortalShell>
   );
@@ -301,9 +323,10 @@ interface EntityFormProps<T extends Record<string, string>> {
   onChange: (value: T) => void;
   onSubmit: () => void;
   success: string;
+  error?: string;
 }
 
-function EntityForm<T extends Record<string, string>>({ title, fields, values, onChange, onSubmit, success }: EntityFormProps<T>) {
+function EntityForm<T extends Record<string, string>>({ title, fields, values, onChange, onSubmit, success, error }: EntityFormProps<T>) {
   return (
     <Card className="max-w-4xl border-white/10 bg-white/8 text-white backdrop-blur-xl">
       <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
@@ -322,6 +345,7 @@ function EntityForm<T extends Record<string, string>>({ title, fields, values, o
           <Button onClick={onSubmit}><PlaneTakeoff className="mr-2 h-4 w-4" />Submit</Button>
         </div>
         {success ? <div className="md:col-span-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">{success}</div> : null}
+        {error ? <div className="md:col-span-2 rounded-2xl border border-red-400/20 bg-red-400/10 p-4 font-semibold text-red-200">{error}</div> : null}
       </CardContent>
     </Card>
   );

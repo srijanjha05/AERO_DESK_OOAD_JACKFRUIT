@@ -49,7 +49,7 @@ public class ManagerController {
     public ResponseEntity<Flight> updateFlightStatus(@PathVariable Long id,
                                                      @RequestBody java.util.Map<String, String> statusBody,
                                                      @AuthenticationPrincipal CustomUserDetails userDetails) {
-        return ResponseEntity.ok(managerService.updateFlightStatus(id, statusBody.get("status"), userDetails.getId()));
+        return ResponseEntity.ok(managerService.updateFlightStatus(id, statusBody.get("status"), statusBody.get("reason"), userDetails.getId()));
     }
 
     @GetMapping("/refunds")
