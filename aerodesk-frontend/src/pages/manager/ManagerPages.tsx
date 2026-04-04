@@ -39,7 +39,9 @@ export function ManagerDashboardPage() {
 export function ManagerFlightsPage() {
   const [from, setFrom] = useState('DEL');
   const [to, setTo] = useState('BOM');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10);
+  });
   const [results, setResults] = useState<Flight[]>([]);
   const queryClient = useQueryClient();
 
@@ -112,6 +114,16 @@ export function ManagerFlightCreatePage() {
     price: '',
     aircraftId: '',
   });
+
+  const airportsQuery = useQuery({
+    queryKey: ['manager-airports'],
+    queryFn: async () => (await api.get<{ id: number; code: string; name: string; city: string }[]>('/manager/airports')).data,
+  });
+  const aircraftQuery = useQuery({
+    queryKey: ['manager-aircraft'],
+    queryFn: async () => (await api.get<{ id: number; model: string; registrationNumber: string }[]>('/manager/aircraft')).data,
+  });
+
   const mutation = useMutation({
     mutationFn: async () => {
       let dep = form.departureTime;
@@ -137,25 +149,69 @@ export function ManagerFlightCreatePage() {
     return m?.response?.data?.error || m?.response?.data?.message || m?.message || 'Failed to schedule flight. Check inputs.';
   };
 
+  const airports = airportsQuery.data ?? [];
+  const aircraftList = aircraftQuery.data ?? [];
+
   return (
     <PortalShell title="Schedule Flight" subtitle="Operations control" items={nav} mode="sidebar">
-      <EntityForm
-        title="Create flight instance"
-        fields={[
-          { label: 'Flight number', key: 'flightNumber' },
-          { label: 'Origin airport ID', key: 'originAirportId' },
-          { label: 'Destination airport ID', key: 'destinationAirportId' },
-          { label: 'Departure time', key: 'departureTime', type: 'datetime-local' },
-          { label: 'Arrival time', key: 'arrivalTime', type: 'datetime-local' },
-          { label: 'Price', key: 'price', type: 'number' },
-          { label: 'Aircraft ID', key: 'aircraftId', type: 'number' },
-        ]}
-        values={form}
-        onChange={setForm}
-        onSubmit={() => mutation.mutate()}
-        success={mutation.isSuccess ? 'Flight created explicitly.' : ''}
-        error={getError()}
-      />
+      <Card className="max-w-4xl border-white/10 bg-white/8 text-white backdrop-blur-xl">
+        <CardHeader><CardTitle>Create flight instance</CardTitle></CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <Field label="Flight number">
+            <Input value={form.flightNumber} onChange={(e) => setForm({ ...form, flightNumber: e.target.value })} className="border-white/12 bg-white/5 text-white" placeholder="e.g. AI-201" />
+          </Field>
+          <Field label="Price (₹)">
+            <Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="border-white/12 bg-white/5 text-white" placeholder="e.g. 4500" />
+          </Field>
+          <Field label="Origin airport">
+            <select
+              value={form.originAirportId}
+              onChange={(e) => setForm({ ...form, originAirportId: e.target.value })}
+              className="w-full rounded-md border border-white/12 bg-white/5 px-3 py-2 text-white text-sm"
+            >
+              <option value="">Select origin</option>
+              {airports.map((a) => (
+                <option key={a.id} value={String(a.id)} className="bg-slate-900">{a.code} — {a.city}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Destination airport">
+            <select
+              value={form.destinationAirportId}
+              onChange={(e) => setForm({ ...form, destinationAirportId: e.target.value })}
+              className="w-full rounded-md border border-white/12 bg-white/5 px-3 py-2 text-white text-sm"
+            >
+              <option value="">Select destination</option>
+              {airports.map((a) => (
+                <option key={a.id} value={String(a.id)} className="bg-slate-900">{a.code} — {a.city}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Departure time">
+            <Input type="datetime-local" value={form.departureTime} onChange={(e) => setForm({ ...form, departureTime: e.target.value })} className="border-white/12 bg-white/5 text-white" />
+          </Field>
+          <Field label="Arrival time">
+            <Input type="datetime-local" value={form.arrivalTime} onChange={(e) => setForm({ ...form, arrivalTime: e.target.value })} className="border-white/12 bg-white/5 text-white" />
+          </Field>
+          <Field label="Aircraft">
+            <select
+              value={form.aircraftId}
+              onChange={(e) => setForm({ ...form, aircraftId: e.target.value })}
+              className="w-full rounded-md border border-white/12 bg-white/5 px-3 py-2 text-white text-sm"
+            >
+              <option value="">Select aircraft</option>
+              {aircraftList.map((a) => (
+                <option key={a.id} value={String(a.id)} className="bg-slate-900">{a.registrationNumber} — {a.model}</option>
+              ))}
+            </select>
+          </Field>
+          <div className="md:col-span-2">
+            <Button onClick={() => mutation.mutate()}><PlaneTakeoff className="mr-2 h-4 w-4" />Submit</Button>
+          </div>
+          {mutation.isSuccess ? <div className="md:col-span-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">Flight created successfully.</div> : null}
+          {getError() ? <div className="md:col-span-2 rounded-2xl border border-red-400/20 bg-red-400/10 p-4 font-semibold text-red-200">{getError()}</div> : null}
+        </CardContent>
+      </Card>
     </PortalShell>
   );
 }

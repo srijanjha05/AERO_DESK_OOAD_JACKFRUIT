@@ -97,7 +97,9 @@ export function PassengerHomePage() {
 export function FlightSearchPage() {
   const [from, setFrom] = useState('DEL');
   const [to, setTo] = useState('BOM');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10);
+  });
   const [results, setResults] = useState<Flight[]>([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();

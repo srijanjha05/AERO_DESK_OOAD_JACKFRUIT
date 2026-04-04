@@ -12,8 +12,10 @@ import com.aerodesk.airline.entity.Seat;
 import com.aerodesk.airline.entity.enums.FlightStatus;
 import com.aerodesk.airline.entity.enums.RefundStatus;
 import com.aerodesk.airline.entity.enums.SeatClass;
+import com.aerodesk.airline.entity.enums.BookingStatus;
 import com.aerodesk.airline.repository.AircraftRepository;
 import com.aerodesk.airline.repository.AirportRepository;
+import com.aerodesk.airline.repository.BookingRepository;
 import com.aerodesk.airline.repository.FlightRepository;
 import com.aerodesk.airline.repository.RefundRepository;
 import com.aerodesk.airline.repository.SeatRepository;
@@ -31,10 +33,19 @@ public class ManagerService {
     private final AircraftRepository aircraftRepository;
     private final SeatRepository seatRepository;
     private final FlightRepository flightRepository;
+    private final BookingRepository bookingRepository;
     private final RefundRepository refundRepository;
     private final NotificationService notificationService;
     private final BookingService bookingService;
     private final AuditService auditService;
+
+    public List<Airport> listAirports() {
+        return airportRepository.findAll();
+    }
+
+    public List<Aircraft> listAircraft() {
+        return aircraftRepository.findAll();
+    }
 
     @Transactional
     public Airport createAirport(AirportRequest request, Long actingUserId) {
@@ -138,6 +149,18 @@ public class ManagerService {
 
         if (saved.getStatus() == FlightStatus.CANCELLED) {
             bookingService.handleFlightCancellationRefunds(saved, actingUserId);
+        } else if (saved.getStatus() == FlightStatus.DELAYED) {
+            // FR-5.5 / FR-10.3 notify confirmed passengers of delay
+            List<Long> passengerIds = bookingRepository.findByFlightId(saved.getId()).stream()
+                    .filter(b -> b.getStatus() == BookingStatus.CONFIRMED)
+                    .map(b -> b.getPassenger().getId())
+                    .distinct()
+                    .toList();
+            if (!passengerIds.isEmpty()) {
+                String msg = "Flight " + saved.getFlightNumber() + " has been delayed." +
+                        (reason != null && !reason.isBlank() ? " Reason: " + reason : "");
+                notificationService.sendBulk(msg, "FLIGHT_DELAYED", passengerIds, null);
+            }
         }
 
         auditService.log(actingUserId, "FLIGHT_STATUS_UPDATED", "FLIGHT", saved.getId().toString(), "SYSTEM");
@@ -154,6 +177,14 @@ public class ManagerService {
         refund.setStatus(RefundStatus.APPROVED);
         refund.setReason(reason == null || reason.isBlank() ? "Approved by airport manager" : reason);
         refund = refundRepository.save(refund);
+        // FR-10.4 notify passenger of refund approval
+        Long passengerId = refund.getPayment().getBooking().getPassenger().getId();
+        notificationService.sendBulk(
+                "Your refund of ₹" + refund.getRefundAmount() + " for booking PNR " +
+                        refund.getPayment().getBooking().getPnrCode() + " has been approved and will be processed shortly.",
+                "REFUND_APPROVED",
+                java.util.List.of(passengerId), null
+        );
         auditService.log(actingUserId, "REFUND_APPROVED", "REFUND", refund.getId().toString(), "SYSTEM");
         return refund;
     }
@@ -164,6 +195,14 @@ public class ManagerService {
         refund.setStatus(RefundStatus.REJECTED);
         refund.setReason(reason);
         refund = refundRepository.save(refund);
+        // FR-10.4 notify passenger of refund rejection
+        Long passengerId = refund.getPayment().getBooking().getPassenger().getId();
+        notificationService.sendBulk(
+                "Your refund request for booking PNR " + refund.getPayment().getBooking().getPnrCode() +
+                        " has been rejected." + (reason != null && !reason.isBlank() ? " Reason: " + reason : ""),
+                "REFUND_REJECTED",
+                java.util.List.of(passengerId), null
+        );
         auditService.log(actingUserId, "REFUND_REJECTED", "REFUND", refund.getId().toString(), "SYSTEM");
         return refund;
     }

@@ -20,10 +20,20 @@ public class ManagerController {
 
     private final ManagerService managerService;
 
+    @GetMapping("/airports")
+    public ResponseEntity<List<Airport>> listAirports() {
+        return ResponseEntity.ok(managerService.listAirports());
+    }
+
     @PostMapping("/airports")
     public ResponseEntity<Airport> createAirport(@RequestBody AirportRequest request,
                                                  @AuthenticationPrincipal CustomUserDetails userDetails) {
         return ResponseEntity.ok(managerService.createAirport(request, userDetails.getId()));
+    }
+
+    @GetMapping("/aircraft")
+    public ResponseEntity<List<Aircraft>> listAircraft() {
+        return ResponseEntity.ok(managerService.listAircraft());
     }
 
     @PostMapping("/aircraft")

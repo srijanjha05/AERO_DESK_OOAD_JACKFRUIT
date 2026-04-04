@@ -60,6 +60,7 @@ public class BookingService {
     private final RefundRepository refundRepository;
     private final UserRepository userRepository;
     private final AuditService auditService;
+    private final NotificationService notificationService;
     private final com.aerodesk.airline.repository.InvoiceRepository invoiceRepository;
 
     @Value("${seat.hold.minutes}")
@@ -204,6 +205,16 @@ public class BookingService {
         invoice.setIssuedAt(LocalDateTime.now());
         invoiceRepository.save(invoice);
 
+        // FR-10.1 booking confirmation, FR-10.2 payment success
+        notificationService.sendBulk(
+                "Booking confirmed! PNR: " + booking.getPnrCode() + ". Flight " +
+                        booking.getFlight().getFlightNumber() + " on " +
+                        booking.getFlight().getDepartureTime().toLocalDate() + ". Your ticket has been issued.",
+                "BOOKING_CONFIRMED",
+                java.util.List.of(booking.getPassenger().getId()),
+                null
+        );
+
         auditService.log(actingUserId, "PAYMENT_SUCCESS", "PAYMENT", payment.getId().toString(), "SYSTEM");
         return payment;
     }
@@ -219,6 +230,16 @@ public class BookingService {
         releaseSeats(booking);
         bookingRepository.save(booking);
         createRefundForCancellation(booking, passengerId, "Passenger cancellation");
+
+        // FR-10 cancellation notification
+        notificationService.sendBulk(
+                "Your booking PNR " + booking.getPnrCode() + " for flight " +
+                        booking.getFlight().getFlightNumber() + " has been cancelled. A refund request has been raised.",
+                "BOOKING_CANCELLED",
+                java.util.List.of(passengerId),
+                null
+        );
+
         auditService.log(passengerId, "BOOKING_CANCELLED", "BOOKING", booking.getId().toString(), "SYSTEM");
         return booking;
     }
@@ -288,6 +309,14 @@ public class BookingService {
             bookingRepository.save(booking);
             releaseSeats(booking);
             createRefundForCancellation(booking, actingUserId, "Flight cancelled by airport operations");
+            // FR-10.3 flight cancellation notification
+            notificationService.sendBulk(
+                    "Flight " + flight.getFlightNumber() + " has been cancelled. Your booking PNR " +
+                            booking.getPnrCode() + " has been affected. A refund will be processed.",
+                    "FLIGHT_CANCELLED",
+                    java.util.List.of(booking.getPassenger().getId()),
+                    null
+            );
         }
     }
 
@@ -338,9 +367,6 @@ public class BookingService {
     private void createRefundForCancellation(Booking booking, Long actingUserId, String reason) {
         paymentRepository.findByBookingId(booking.getId()).ifPresent(payment -> {
             BigDecimal refundPercentage = getRefundPercentage(booking.getFlight().getDepartureTime());
-            if (refundPercentage.compareTo(BigDecimal.ZERO) <= 0) {
-                return;
-            }
 
             Refund refund = new Refund();
             refund.setPayment(payment);
@@ -361,7 +387,7 @@ public class BookingService {
         if (hoursUntilDeparture >= 24) {
             return new BigDecimal("0.50");
         }
-        return BigDecimal.ZERO;
+        return new BigDecimal("0.10");
     }
 
     private void releaseSeats(Booking booking) {
