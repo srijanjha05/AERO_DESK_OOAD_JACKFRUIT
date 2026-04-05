@@ -56,6 +56,15 @@ public class AdminService {
         return passengerRepository.findById(id).orElseThrow();
     }
 
+    public Booking getBookingByPnr(String pnrCode) {
+        return bookingRepository.findByPnrCode(pnrCode)
+                .orElseThrow(() -> new RuntimeException("No booking found for PNR: " + pnrCode));
+    }
+
+    public List<Booking> getPassengerBookings(Long passengerId) {
+        return bookingRepository.findByPassengerId(passengerId);
+    }
+
     @Transactional
     public CheckIn counterCheckIn(Long bookingId, Long actingUserId) {
         return bookingService.counterCheckIn(bookingId, actingUserId);
@@ -131,8 +140,13 @@ public class AdminService {
         );
     }
 
-    public List<User> getAllUsers() {
-        return userRepository.findAll();
+    public List<User> getAllUsers(String q) {
+        List<User> all = userRepository.findAll();
+        if (q == null || q.isBlank()) return all;
+        String norm = q.toLowerCase();
+        return all.stream()
+                .filter(u -> u.getName().toLowerCase().contains(norm) || u.getEmail().toLowerCase().contains(norm))
+                .toList();
     }
 
     @Transactional

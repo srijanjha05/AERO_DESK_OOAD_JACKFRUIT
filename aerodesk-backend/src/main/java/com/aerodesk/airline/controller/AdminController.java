@@ -52,6 +52,18 @@ public class AdminController {
     }
 
     @PreAuthorize("hasRole('EMPLOYEE') or hasRole('ADMIN')")
+    @GetMapping("/bookings/pnr/{pnrCode}")
+    public ResponseEntity<Booking> getBookingByPnr(@PathVariable String pnrCode) {
+        return ResponseEntity.ok(adminService.getBookingByPnr(pnrCode));
+    }
+
+    @PreAuthorize("hasRole('EMPLOYEE') or hasRole('ADMIN')")
+    @GetMapping("/passengers/{passengerId}/bookings")
+    public ResponseEntity<List<Booking>> getPassengerBookings(@PathVariable Long passengerId) {
+        return ResponseEntity.ok(adminService.getPassengerBookings(passengerId));
+    }
+
+    @PreAuthorize("hasRole('EMPLOYEE') or hasRole('ADMIN')")
     @PostMapping("/checkin/{bookingId}")
     public ResponseEntity<CheckIn> counterCheckIn(@PathVariable Long bookingId,
                                                   @AuthenticationPrincipal CustomUserDetails userDetails) {
@@ -95,8 +107,8 @@ public class AdminController {
 
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/users")
-    public ResponseEntity<List<User>> getAllUsers() {
-        return ResponseEntity.ok(adminService.getAllUsers());
+    public ResponseEntity<List<User>> getAllUsers(@RequestParam(required = false) String q) {
+        return ResponseEntity.ok(adminService.getAllUsers(q));
     }
 
     @PreAuthorize("hasRole('ADMIN')")
