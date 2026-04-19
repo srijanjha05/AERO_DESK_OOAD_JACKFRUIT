@@ -1,0 +1,298 @@
+================================================================================
+              AERODESK - FINAL DEMO DOCUMENT  |  OOAD PROJECT PRESENTATION
+================================================================================
+Team: Srijan | Sruthi | Yashas | Smrithi
+Date: 19 April 2026
+Stack: Spring Boot 3 (Java) + React 18 (TypeScript) + MySQL + JWT Auth
+================================================================================
+
+
+================================================================================
+  SECTION 1 — TEAM CONTRIBUTION BREAKDOWN
+================================================================================
+
+--------------------------------------------------------------------------------
+SRIJAN
+--------------------------------------------------------------------------------
+Primary Responsibilities:
+  * System design decisions — understood and can explain the layered architecture
+    (Controller → Service → Factory → Repository → Entity) and why each layer exists
+  * OOAD Design Patterns — mapped and documented all SOLID, GRASP, and Creational
+    patterns across the project (see Section 3); owns the pattern explanation during demo
+  * Booking flow understanding — can explain the full passenger journey from seat
+    selection to boarding pass, and how SeatHold prevents double-booking
+  * Auth & security understanding — can explain how JWT works end-to-end, how OTP
+    fits in, and how roles are enforced via @PreAuthorize
+  * Factory package — can explain why we separated factories from services and
+    what design principles that satisfies (SRP, DIP, Low Coupling)
+  * Opened the presentation and handled all concept/theory questions from the prof
+
+Topics to explain if asked:
+  - Why JOINED inheritance over SINGLE_TABLE
+  - How JWT stateless auth works end-to-end
+  - How SeatHold prevents double-booking under concurrent requests
+  - Why factories were separated from services (Low Coupling / SRP)
+  - Factory Method vs Abstract Factory vs Builder — the distinction in our code
+
+
+--------------------------------------------------------------------------------
+SRUTHI  [Frontend Developer + Auth Module]
+--------------------------------------------------------------------------------
+Primary Responsibilities:
+  * Complete React frontend — project structure, routing (React Router v6), global
+    state management (Zustand store), Axios interceptors for JWT attachment
+  * Passenger-facing pages: flight search (PublicFlightController integration),
+    seat selection UI, booking confirmation, payment screen, my bookings page,
+    online check-in flow, boarding pass download
+  * Auth pages — Register, Login (email/password + OTP 2-step), token storage,
+    protected route guards
+  * Layout components — navbar, sidebar, notification badge
+  * UI polish — Tailwind CSS theming, responsive design, loading states, toast
+    notifications
+
+Topics to explain if asked:
+  - How the frontend handles JWT expiry and redirects
+  - How seat availability is reflected in real-time on the UI
+
+
+--------------------------------------------------------------------------------
+YASHAS  [Airport Manager Module]
+--------------------------------------------------------------------------------
+Primary Responsibilities:
+  * ManagerService — full implementation: add airport (IATA uniqueness), add
+    aircraft (auto-generates seat rows for First/Business/Economy classes),
+    schedule flights with aircraft overlap prevention (400 error on clash),
+    update flight status (DELAYED/CANCELLED with mandatory reason field)
+  * ManagerController — all REST endpoints under /api/manager/**,
+    @PreAuthorize("hasRole('AIRPORT_MANAGER')") security enforcement
+  * Disruption Management — CANCELLED status triggers backend refund sweep across
+    all confirmed bookings on that flight
+  * Refund Authorization — manager views Employee-initiated refund queue, approves
+    or rejects with logged rationale (RefundDecisionRequest DTO)
+  * Targeted Broadcast Notifications — BulkNotificationRequest, burst INSERT into
+    ad_notifications targeting specific roles (NotificationService integration)
+  * Manager frontend pages — Airport Setup, Aircraft Onboarding, Flight Scheduler,
+    Live Flight Board, Refund Queue, Notification Broadcast panels
+
+Topics to explain if asked:
+  - How aircraft overlap is detected at the JPA layer
+  - What happens in the DB when a flight is CANCELLED (refund cascade)
+
+
+--------------------------------------------------------------------------------
+SMRITHI  [Employee Module + Admin Module]
+--------------------------------------------------------------------------------
+Primary Responsibilities:
+  * Employee module — assisted booking (create booking on behalf of passenger,
+    collecting 5 traveler metadata fields), counter check-in via PNR (INSERT into
+    ad_checkins with Method=COUNTER + boarding pass generation), refund initiation
+    (REQUESTED status only — employees cannot approve)
+  * Passenger CRM Lookup — filtered SELECT on ad_users (role=PASSENGER) cross-
+    joined with ad_bookings to show passenger flight history
+  * Admin module — role escalation (RBAC: update role enum on ad_users),
+    tamper-proof audit log viewer (AuditService reads ad_audit_logs: IP, entity,
+    JSON action map, success/failure), executive analytics dashboard (revenue
+    SUM, route performance), global user directory search
+  * AdminController — all endpoints under /api/admin/**,
+    @PreAuthorize("hasRole('ADMIN')") enforcement
+  * Employee frontend pages — Assisted Booking form, PNR Lookup / Check-In,
+    Refund Initiation form, Passenger CRM view
+  * Admin frontend pages — User Management, Role Assignment, Audit Log viewer,
+    Analytics/Reports dashboard
+
+Topics to explain if asked:
+  - Why employees can only REQUEST refunds (not approve) — separation of duties
+  - How AuditService is decoupled from business logic (Pure Fabrication / AOP-like)
+
+
+================================================================================
+  SECTION 2 — DEMO SEQUENCE  [TARGET: 10 MINUTES TOTAL]
+================================================================================
+
+Each step lists: WHO presents it | WHAT to show | TALKING POINT
+
+--------------------------------------------------------------------------------
+STEP 1 — Intro + Architecture (Srijan | ~1.5 min)
+--------------------------------------------------------------------------------
+  Show:  Quickly show the folder structure or a simple diagram:
+         Controller → Service → Factory → Repository → Entity
+         Mention the 4 user roles: Passenger, Employee, Airport Manager, Admin
+  Say:   "AeroDesk is a full-stack airline reservation system. The backend is
+          Spring Boot, frontend is React, and we use MySQL. The system has 4 roles,
+          each with a separate set of capabilities. We designed it around SOLID and
+          GRASP principles — I'll tie those in as we demo each role."
+
+--------------------------------------------------------------------------------
+STEP 2 — Auth + Passenger Flow (Sruthi | ~2.5 min)
+--------------------------------------------------------------------------------
+  Show:  Register a new passenger → OTP screen → login
+         Search flights → pick a seat → pay → check-in → boarding pass
+  Say:   "Login uses OTP-based 2-factor auth with JWT tokens. Once the passenger
+          pays, a BookingFactory assembles the booking object and a TransactionFactory
+          builds the invoice — that is Factory Method and Builder patterns in action.
+          The seat was temporarily held using SeatHold — an Object Pool pattern —
+          to prevent double-booking."
+
+--------------------------------------------------------------------------------
+STEP 3 — Employee Flow (Smrithi | ~2 min)
+--------------------------------------------------------------------------------
+  Show:  Login as Employee
+         Assisted Booking — fill traveler details, book on behalf of a passenger
+         PNR Check-In — enter booking code, generate boarding pass at counter
+         Refund Initiation — submit a refund request (status stays REQUESTED)
+  Say:   "Employees can only request refunds, not approve them — separation of
+          duties enforced at the service layer. Role access is locked down via
+          @PreAuthorize on every controller endpoint."
+
+--------------------------------------------------------------------------------
+STEP 4 — Airport Manager Flow (Yashas | ~2 min)
+--------------------------------------------------------------------------------
+  Show:  Login as Airport Manager
+         Schedule a flight — try overlapping aircraft timing → see 400 error
+         Mark a flight CANCELLED → refunds auto-triggered for all bookings
+         Approve a refund from the queue
+         Send a bulk notification to passengers
+  Say:   "ManagerService is the Information Expert for all operations. When a
+          flight is cancelled, the system automatically sweeps bookings and
+          creates refunds. NotificationFactory — a Pure Fabrication — handles
+          creating notification objects with no domain equivalent."
+
+--------------------------------------------------------------------------------
+STEP 5 — Admin + Design Patterns (Smrithi + Srijan | ~2 min)
+--------------------------------------------------------------------------------
+  Smrithi shows:
+         Login as Admin → assign a role to a user → view audit logs
+  Say:   "AuditService is a Pure Fabrication — every restricted action across
+          the entire system is automatically logged with IP, entity, and outcome."
+
+  Srijan wraps up:
+  Say:   "To summarize the patterns — we used Factory Method across 5 factory
+          classes, they together form an Abstract Factory family. All services
+          are Spring Singletons. SeatHold is Object Pool. On the GRASP side,
+          each service is an Information Expert for its domain. Factories are
+          Pure Fabrications that sit between services and entities — that is
+          Indirection. And every SOLID principle is present: SRP per factory,
+          OCP via inheritance, LSP in AuthService, ISP in repositories, DIP
+          everywhere Spring injects abstractions."
+
+
+================================================================================
+  SECTION 3 — SOLID, GRASP & CREATIONAL PATTERNS (from design_patterns_summary)
+================================================================================
+
+--------------------------------------------------------------------------------
+SOLID PRINCIPLES
+--------------------------------------------------------------------------------
+
+Principle                  | Class / File                                      | How It's Applied
+---------------------------|---------------------------------------------------|--------------------------------------------------
+SRP - Single Responsibility| BookingFactory                                    | Only creates Booking objects with validated data
+SRP                        | TransactionFactory                                | Only creates Payment, Invoice, Refund objects
+SRP                        | NotificationFactory                               | Only creates Notification objects
+SRP                        | TravelDocumentFactory                             | Only creates CheckIn and BoardingPass objects
+SRP                        | AuditService                                      | Only handles audit logging, fully separated from business logic
+OCP - Open/Closed          | User entity (JOINED inheritance)                  | New user types added without modifying User base class
+OCP                        | Factory classes                                   | Open for extension via new factory methods; closed for modification
+OCP                        | Role enum                                         | New roles added without changing existing business logic
+LSP - Liskov Substitution  | Passenger, Employee, Admin, AirportManager        | All extend User and can substitute it anywhere it's expected
+LSP                        | AuthService.resolveUser() (lines 96-126)          | Retrieves any User subtype interchangeably
+LSP                        | CustomUserDetails                                 | Properly implements UserDetails without breaking substitutability
+ISP - Interface Segregation| BookingRepository, PaymentRepository, etc.        | Segregated by entity — no bloated interfaces
+ISP                        | Each *Service class                               | Exposes only methods relevant to its own domain
+DIP - Dependency Inversion | BookingService (lines 50-67)                      | Depends on injected repository and factory abstractions, not concretes
+DIP                        | NotificationService (lines 20-24)                 | Depends on NotificationFactory abstraction, never instantiates directly
+DIP                        | All Controllers                                   | Depend on service abstractions injected by Spring DI
+
+
+--------------------------------------------------------------------------------
+GRASP PATTERNS
+--------------------------------------------------------------------------------
+
+Pattern                    | Class / File                                      | How It's Applied
+---------------------------|---------------------------------------------------|--------------------------------------------------
+Creator                    | BookingFactory.createBooking() (lines 22-43)      | Has all data needed to create Booking; responsible for instantiation
+Creator                    | TransactionFactory.createSuccessfulPayment()      | Creates Payment objects from booking/seat data (lines 22-31)
+Creator                    | PassengerFactory.createPassenger() (lines 11-26)  | Creates Passenger during registration
+Information Expert         | BookingService                                    | Owns all booking workflow info — create, pay, cancel, check-in
+Information Expert         | ManagerService                                    | Owns flight operations, refund approvals, notifications
+Information Expert         | AdminService                                      | Owns passenger searches, audit logs, reports
+Controller                 | BookingController                                 | Receives booking HTTP requests and delegates to BookingService
+Controller                 | AuthController                                    | Handles auth flow, routes to AuthService
+Controller                 | ManagerController                                 | Handles manager operations, routes to ManagerService
+Low Coupling               | Factory classes                                   | Coupled only to entity/DTOs — no repository or service dependencies
+Low Coupling               | NotificationService                               | Decoupled from BookingService; called via injection, not direct creation
+High Cohesion              | BookingService                                    | All methods cover one domain: the booking lifecycle
+High Cohesion              | ManagerService                                    | All methods cover airport operations: airports, aircraft, flights, refunds
+High Cohesion              | AdminService                                      | All methods cover admin oversight: search, audits, reports
+Polymorphism               | AuthService.resolveUser() (lines 96-126)          | Handles Passenger, Employee, Admin, AirportManager polymorphically
+Polymorphism               | BookingService.createBooking() (lines 38-40)      | Differentiates employee vs passenger booking via Role enum
+Pure Fabrication           | NotificationFactory                               | No real-world domain equivalent — pure utility for notification creation
+Pure Fabrication           | TransactionFactory                                | Abstracts complex Payment/Invoice/Refund creation logic
+Pure Fabrication           | AuditService                                      | Provides auditing infrastructure; not a core domain concept
+Indirection                | Factory classes                                   | Sit between services and entity instantiation — services never call new directly
+Indirection                | AuditService                                      | Decouples business logic from audit concerns
+Protected Variations       | SeatHold + BookingService.expireSeatHolds()       | Protects seat availability from payment timeout edge cases (lines 258-272)
+Protected Variations       | @PreAuthorize on controllers                      | Shields operations from unauthorized role variations
+Protected Variations       | BookingFactory validation                         | Validates traveler data before creating bookings — shields service layer
+
+
+--------------------------------------------------------------------------------
+CREATIONAL DESIGN PATTERNS
+--------------------------------------------------------------------------------
+
+Pattern                    | Class / File                                      | How It's Applied
+---------------------------|---------------------------------------------------|--------------------------------------------------
+Factory Method             | BookingFactory.createBooking() (lines 22-43)      | Encapsulates complex Booking creation with validation in a dedicated method
+Factory Method             | PassengerFactory.createPassenger() (lines 11-26)  | Encapsulates Passenger creation at registration
+Factory Method             | TravelDocumentFactory.createCheckIn()             | Two factory methods for related travel document types (lines 15-30)
+                           | & createBoardingPass()                            |
+Factory Method             | TransactionFactory.createSuccessfulPayment()      | Separate factory methods for each transaction type
+                           | createInvoiceForBooking() / createRefund()        |
+Abstract Factory           | service/factory/ package as a whole               | Package acts as an abstract factory family — related factories for Bookings,
+                           |                                                   | Passengers, Notifications, Transactions, TravelDocuments
+Builder (implicit)         | TransactionFactory.createInvoiceForBooking()      | Builds Invoice step-by-step: calculates base fare, tax, then assembles (lines 33-43)
+Builder (implicit)         | BookingFactory                                    | Uses chained setters to assemble a complex Booking object with validation
+Singleton                  | All @Service / @Component classes                 | Spring manages one instance each: BookingService, AuthService, AdminService,
+                           |                                                   | ManagerService, NotificationService, AuditService, all factories
+Singleton                  | JwtUtil                                           | Spring singleton managing JWT token generation/validation
+Object Pool (implicit)     | SeatHold + expireSeatHolds() (lines 258-272)      | Pool of temporarily held seats with automatic expiration and release back to availability
+Object Pool (implicit)     | HikariCP (via Spring Data JPA)                    | Database connection pool managed transparently by the framework
+
+
+================================================================================
+  QUICK REFERENCE — LOGIN CREDENTIALS FOR DEMO
+================================================================================
+
+Role              | Email                        | Password
+------------------|------------------------------|------------------
+Passenger         | (register live during demo)  | your choice
+Employee          | employee@aerodesk.com        | password123
+Airport Manager   | manager@aerodesk.com         | password123
+Admin (CEO)       | admin@aerodesk.com           | password123
+
+Ports:
+  Backend  : http://localhost:8080
+  Frontend : http://localhost:3000
+
+Note: OTP for login is printed to the Spring Boot console (or stored in ad_otps table).
+
+
+================================================================================
+  TIPS FOR THE PRESENTATION
+================================================================================
+
+  1. Start the backend first (mvn spring-boot:run), then the frontend (npm run dev).
+  2. The DatabaseSeeder pre-loads airports, aircraft, and flights — no manual setup needed.
+  3. If the prof asks about concurrency / race conditions, point to SeatHold + the
+     scheduler (SeatHoldExpiryScheduler) — that is the most technically impressive part.
+  4. If asked why factories instead of just using 'new' in services — cite DIP, SRP,
+     Low Coupling, and Indirection all at once.
+  5. Keep the demo flowing; avoid typing long form data — have pre-filled test values
+     ready in a notepad to paste quickly.
+  6. Pattern questions will likely be about Factory vs Abstract Factory and Singleton.
+     The answer: all factories together form a family (Abstract Factory); individually
+     each factory method is a Factory Method; Spring @Service = Singleton.
+
+================================================================================
+                              GOOD LUCK TOMORROW!
+================================================================================

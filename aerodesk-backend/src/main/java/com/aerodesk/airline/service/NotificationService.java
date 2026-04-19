@@ -5,11 +5,11 @@ import com.aerodesk.airline.entity.User;
 import com.aerodesk.airline.entity.enums.Role;
 import com.aerodesk.airline.repository.NotificationRepository;
 import com.aerodesk.airline.repository.UserRepository;
+import com.aerodesk.airline.service.factory.NotificationFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -21,6 +21,7 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private final NotificationFactory notificationFactory;
 
     public List<Notification> getNotificationsForUser(Long userId) {
         return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
@@ -56,12 +57,7 @@ public class NotificationService {
 
         List<Notification> notifications = new ArrayList<>();
         for (User recipient : recipients) {
-            Notification notification = new Notification();
-            notification.setUser(recipient);
-            notification.setMessage(message);
-            notification.setType(type);
-            notification.setIsRead(false);
-            notification.setCreatedAt(LocalDateTime.now());
+            Notification notification = notificationFactory.create(recipient, message, type);
             notifications.add(notificationRepository.save(notification));
         }
 

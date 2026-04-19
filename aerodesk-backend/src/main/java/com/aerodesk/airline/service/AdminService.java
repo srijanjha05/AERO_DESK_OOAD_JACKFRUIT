@@ -10,7 +10,6 @@ import com.aerodesk.airline.entity.User;
 import com.aerodesk.airline.entity.enums.BookingStatus;
 import com.aerodesk.airline.entity.enums.FlightStatus;
 import com.aerodesk.airline.entity.enums.PaymentStatus;
-import com.aerodesk.airline.entity.enums.RefundStatus;
 import com.aerodesk.airline.repository.AuditLogRepository;
 import com.aerodesk.airline.repository.BookingRepository;
 import com.aerodesk.airline.repository.FlightRepository;
@@ -18,6 +17,7 @@ import com.aerodesk.airline.repository.PassengerRepository;
 import com.aerodesk.airline.repository.PaymentRepository;
 import com.aerodesk.airline.repository.RefundRepository;
 import com.aerodesk.airline.repository.UserRepository;
+import com.aerodesk.airline.service.factory.TransactionFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +42,7 @@ public class AdminService {
     private final FlightRepository flightRepository;
     private final BookingService bookingService;
     private final AuditService auditService;
+    private final TransactionFactory transactionFactory;
 
     public List<Passenger> searchPassengers(String query) {
         String normalized = query.toLowerCase();
@@ -79,13 +80,8 @@ public class AdminService {
 
         Refund refund = paymentRepository.findByBookingId(bookingId)
                 .map(payment -> {
-                    Refund item = new Refund();
-                    item.setPayment(payment);
-                    item.setRefundAmount(payment.getAmount().setScale(2, RoundingMode.HALF_UP));
-                    item.setStatus(RefundStatus.REQUESTED);
-                    item.setRequestDate(LocalDate.now());
-                    item.setReason(reason);
-                    return refundRepository.save(item);
+                    BigDecimal refundAmount = payment.getAmount().setScale(2, RoundingMode.HALF_UP);
+                    return refundRepository.save(transactionFactory.createRequestedRefund(payment, refundAmount, reason));
                 })
                 .orElseThrow(() -> new RuntimeException("Payment not found for booking"));
 

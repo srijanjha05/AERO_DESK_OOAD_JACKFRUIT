@@ -16,9 +16,6 @@ import com.aerodesk.airline.entity.User;
 import com.aerodesk.airline.entity.enums.BookingStatus;
 import com.aerodesk.airline.entity.enums.CheckInMethod;
 import com.aerodesk.airline.entity.enums.FlightStatus;
-import com.aerodesk.airline.entity.enums.PaymentMethod;
-import com.aerodesk.airline.entity.enums.PaymentStatus;
-import com.aerodesk.airline.entity.enums.RefundStatus;
 import com.aerodesk.airline.entity.enums.Role;
 import com.aerodesk.airline.repository.BoardingPassRepository;
 import com.aerodesk.airline.repository.BookingRepository;
@@ -30,6 +27,9 @@ import com.aerodesk.airline.repository.RefundRepository;
 import com.aerodesk.airline.repository.SeatHoldRepository;
 import com.aerodesk.airline.repository.SeatRepository;
 import com.aerodesk.airline.repository.UserRepository;
+import com.aerodesk.airline.service.factory.BookingFactory;
+import com.aerodesk.airline.service.factory.TransactionFactory;
+import com.aerodesk.airline.service.factory.TravelDocumentFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -62,6 +62,9 @@ public class BookingService {
     private final AuditService auditService;
     private final NotificationService notificationService;
     private final com.aerodesk.airline.repository.InvoiceRepository invoiceRepository;
+    private final BookingFactory bookingFactory;
+    private final TransactionFactory transactionFactory;
+    private final TravelDocumentFactory travelDocumentFactory;
 
     @Value("${seat.hold.minutes}")
     private int seatHoldMinutes;
@@ -113,24 +116,7 @@ public class BookingService {
             }
         }
 
-        Booking booking = new Booking();
-        booking.setPnrCode(generateUniquePnr());
-        booking.setFlight(flight);
-        booking.setPassenger(passenger);
-        booking.setBookingDate(LocalDateTime.now());
-        booking.setStatus(BookingStatus.PAYMENT_PENDING);
-        booking.setTotalAmount(flight.getPrice().multiply(BigDecimal.valueOf(selectedSeats.size())));
-        booking.setTravelerName(requiredValue(request.getTravelerName(), "Traveler name is required"));
-        booking.setTravelerDateOfBirth(requiredValue(request.getTravelerDateOfBirth(), "Traveler date of birth is required"));
-        booking.setTravelerGender(requiredValue(request.getTravelerGender(), "Traveler gender is required"));
-        booking.setTravelerEmail(requiredValue(request.getTravelerEmail(), "Traveler email is required"));
-        booking.setTravelerPhone(requiredValue(request.getTravelerPhone(), "Traveler phone is required"));
-        booking.setTravelerNationality(request.getTravelerNationality());
-        booking.setTravelerPassportNumber(request.getTravelerPassportNumber());
-        if (actingUser.getRole() == Role.EMPLOYEE) {
-            booking.setCreatedByEmployee((com.aerodesk.airline.entity.Employee) actingUser);
-        }
-        booking.setSeats(selectedSeats);
+        Booking booking = bookingFactory.createBooking(generateUniquePnr(), flight, passenger, request, selectedSeats, actingUser);
 
         passenger.setName(booking.getTravelerName());
         passenger.setPhone(booking.getTravelerPhone());
@@ -176,13 +162,7 @@ public class BookingService {
             throw new RuntimeException("Insufficient payment amount");
         }
 
-        Payment payment = new Payment();
-        payment.setBooking(booking);
-        payment.setAmount(request.getAmount());
-        payment.setPaymentMethod(PaymentMethod.valueOf(request.getPaymentMethod().toUpperCase()));
-        payment.setStatus(PaymentStatus.SUCCESS);
-        payment.setTransactionId(UUID.randomUUID().toString());
-        payment.setPaidAt(LocalDateTime.now());
+        Payment payment = transactionFactory.createSuccessfulPayment(booking, request);
         payment = paymentRepository.save(payment);
 
         booking.setStatus(BookingStatus.CONFIRMED);
@@ -195,14 +175,7 @@ public class BookingService {
             });
         }
 
-        Invoice invoice = new Invoice();
-        invoice.setBooking(booking);
-        invoice.setInvoiceNumber("INV-" + booking.getPnrCode() + "-" + LocalDate.now().toString().replace("-", ""));
-        invoice.setTotalAmount(booking.getTotalAmount());
-        BigDecimal tax = booking.getTotalAmount().multiply(new BigDecimal("0.18")).setScale(2, RoundingMode.HALF_UP);
-        invoice.setTaxAmount(tax);
-        invoice.setBaseFare(booking.getTotalAmount().subtract(tax));
-        invoice.setIssuedAt(LocalDateTime.now());
+        Invoice invoice = transactionFactory.createInvoiceForBooking(booking);
         invoiceRepository.save(invoice);
 
         // FR-10.1 booking confirmation, FR-10.2 payment success
@@ -347,17 +320,10 @@ public class BookingService {
     }
 
     private CheckIn createCheckIn(Booking booking, CheckInMethod method, Long actingUserId) {
-        CheckIn checkIn = new CheckIn();
-        checkIn.setBooking(booking);
-        checkIn.setCheckInTime(LocalDateTime.now());
-        checkIn.setMethod(method);
+        CheckIn checkIn = travelDocumentFactory.createCheckIn(booking, method);
         checkIn = checkInRepository.save(checkIn);
 
-        BoardingPass boardingPass = new BoardingPass();
-        boardingPass.setCheckIn(checkIn);
-        boardingPass.setGate("G" + ((booking.getFlight().getId() % 20) + 1));
-        boardingPass.setBoardingTime(booking.getFlight().getDepartureTime().minusMinutes(45));
-        boardingPass.setBarcodeData("BP-" + booking.getPnrCode() + "-" + UUID.randomUUID());
+        BoardingPass boardingPass = travelDocumentFactory.createBoardingPass(checkIn, booking);
         boardingPassRepository.save(boardingPass);
 
         auditService.log(actingUserId, "CHECKIN_COMPLETED", "CHECK_IN", checkIn.getId().toString(), "SYSTEM");
@@ -367,13 +333,8 @@ public class BookingService {
     private void createRefundForCancellation(Booking booking, Long actingUserId, String reason) {
         paymentRepository.findByBookingId(booking.getId()).ifPresent(payment -> {
             BigDecimal refundPercentage = getRefundPercentage(booking.getFlight().getDepartureTime());
-
-            Refund refund = new Refund();
-            refund.setPayment(payment);
-            refund.setRefundAmount(payment.getAmount().multiply(refundPercentage).setScale(2, RoundingMode.HALF_UP));
-            refund.setStatus(RefundStatus.REQUESTED);
-            refund.setRequestDate(LocalDate.now());
-            refund.setReason(reason);
+            BigDecimal refundAmount = payment.getAmount().multiply(refundPercentage).setScale(2, RoundingMode.HALF_UP);
+            Refund refund = transactionFactory.createRequestedRefund(payment, refundAmount, reason);
             refundRepository.save(refund);
             auditService.log(actingUserId, "REFUND_REQUESTED", "REFUND", refund.getId().toString(), "SYSTEM");
         });
@@ -409,17 +370,4 @@ public class BookingService {
         return pnr;
     }
 
-    private String requiredValue(String value, String errorMessage) {
-        if (value == null || value.isBlank()) {
-            throw new RuntimeException(errorMessage);
-        }
-        return value.trim();
-    }
-
-    private LocalDate requiredValue(LocalDate value, String errorMessage) {
-        if (value == null) {
-            throw new RuntimeException(errorMessage);
-        }
-        return value;
-    }
 }

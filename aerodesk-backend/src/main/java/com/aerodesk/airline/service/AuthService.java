@@ -14,6 +14,7 @@ import com.aerodesk.airline.repository.PassengerRepository;
 import com.aerodesk.airline.repository.UserRepository;
 import com.aerodesk.airline.security.CustomUserDetails;
 import com.aerodesk.airline.security.JwtUtil;
+import com.aerodesk.airline.service.factory.PassengerFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -35,25 +36,14 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final OtpService otpService;
     private final AuditService auditService;
+    private final PassengerFactory passengerFactory;
 
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new RuntimeException("Email already taken");
         }
 
-        Passenger passenger = new Passenger();
-        passenger.setName(request.getName());
-        passenger.setEmail(request.getEmail());
-        passenger.setPassword(passwordEncoder.encode(request.getPassword()));
-        passenger.setPhone(request.getPhone());
-        passenger.setRole(Role.PASSENGER);
-        passenger.setPassportNumber(request.getPassportNumber());
-        passenger.setNationality(request.getNationality());
-        passenger.setDateOfBirth(request.getDateOfBirth());
-        passenger.setGender(request.getGender());
-        passenger.setAddressLine(request.getAddressLine());
-        passenger.setEmergencyContactName(request.getEmergencyContactName());
-        passenger.setEmergencyContactPhone(request.getEmergencyContactPhone());
+        Passenger passenger = passengerFactory.createPassenger(request, passwordEncoder.encode(request.getPassword()));
 
         passengerRepository.save(passenger);
 

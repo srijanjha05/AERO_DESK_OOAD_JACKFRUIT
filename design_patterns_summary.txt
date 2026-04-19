@@ -1,0 +1,83 @@
+================================================================================
+         AERODESK - SOLID, GRASP & CREATIONAL PATTERNS SUMMARY
+================================================================================
+
+--------------------------------------------------------------------------------
+SOLID PRINCIPLES
+--------------------------------------------------------------------------------
+
+Principle                  | Class / File                                      | How It's Applied
+---------------------------|---------------------------------------------------|--------------------------------------------------
+SRP - Single Responsibility| BookingFactory                                    | Only creates Booking objects with validated data
+SRP                        | TransactionFactory                                | Only creates Payment, Invoice, Refund objects
+SRP                        | NotificationFactory                               | Only creates Notification objects
+SRP                        | TravelDocumentFactory                             | Only creates CheckIn and BoardingPass objects
+SRP                        | AuditService                                      | Only handles audit logging, fully separated from business logic
+OCP - Open/Closed          | User entity (JOINED inheritance)                  | New user types (Passenger, Employee, Admin, AirportManager) added without modifying User
+OCP                        | Factory classes                                   | Open for extension via new factory methods; closed for modification
+OCP                        | Role enum                                         | New roles added without changing existing business logic
+LSP - Liskov Substitution  | Passenger, Employee, Admin, AirportManager        | All extend User and can substitute it anywhere it's expected
+LSP                        | AuthService.resolveUser() (lines 96-126)          | Retrieves any User subtype interchangeably
+LSP                        | CustomUserDetails                                 | Properly implements UserDetails without breaking substitutability
+ISP - Interface Segregation| BookingRepository, PaymentRepository, etc.        | Segregated by entity - no bloated interfaces
+ISP                        | Each *Service class                               | Exposes only methods relevant to its own domain
+DIP - Dependency Inversion | BookingService (lines 50-67)                      | Depends on injected repository and factory abstractions, not concrete classes
+DIP                        | NotificationService (lines 20-24)                 | Depends on NotificationFactory abstraction, never instantiates directly
+DIP                        | All Controllers                                   | Depend on service abstractions injected by Spring DI
+
+
+--------------------------------------------------------------------------------
+GRASP PATTERNS
+--------------------------------------------------------------------------------
+
+Pattern                    | Class / File                                      | How It's Applied
+---------------------------|---------------------------------------------------|--------------------------------------------------
+Creator                    | BookingFactory.createBooking() (lines 22-43)      | Has all data needed to create Booking; responsible for instantiation
+Creator                    | TransactionFactory.createSuccessfulPayment()      | Creates Payment objects from booking/seat data (lines 22-31)
+Creator                    | PassengerFactory.createPassenger() (lines 11-26)  | Creates Passenger during registration
+Information Expert         | BookingService                                    | Owns all booking workflow info - create, pay, cancel, check-in
+Information Expert         | ManagerService                                    | Owns flight operations, refund approvals, notifications
+Information Expert         | AdminService                                      | Owns passenger searches, audit logs, reports
+Controller                 | BookingController                                 | Receives booking HTTP requests and delegates to BookingService
+Controller                 | AuthController                                    | Handles auth flow, routes to AuthService
+Controller                 | ManagerController                                 | Handles manager operations, routes to ManagerService
+Low Coupling               | Factory classes                                   | Coupled only to entity/DTOs - no repository or service dependencies
+Low Coupling               | NotificationService                               | Decoupled from BookingService; called via injection, not direct creation
+High Cohesion              | BookingService                                    | All methods cover one domain: the booking lifecycle
+High Cohesion              | ManagerService                                    | All methods cover airport operations: airports, aircraft, flights, refunds
+High Cohesion              | AdminService                                      | All methods cover admin oversight: search, audits, reports
+Polymorphism               | AuthService.resolveUser() (lines 96-126)          | Handles Passenger, Employee, Admin, AirportManager polymorphically
+Polymorphism               | BookingService.createBooking() (lines 38-40)      | Differentiates employee vs passenger booking via Role enum
+Pure Fabrication           | NotificationFactory                               | No real-world domain equivalent - pure utility for notification creation
+Pure Fabrication           | TransactionFactory                                | Abstracts complex Payment/Invoice/Refund creation logic
+Pure Fabrication           | AuditService                                      | Provides auditing infrastructure; not a core domain concept
+Indirection                | Factory classes                                   | Sit between services and entity instantiation - services never call new directly
+Indirection                | AuditService                                      | Decouples business logic from audit concerns
+Protected Variations       | SeatHold + BookingService.expireSeatHolds()       | Protects seat availability from payment timeout edge cases (lines 258-272)
+Protected Variations       | @PreAuthorize on controllers                      | Shields operations from unauthorized role variations
+Protected Variations       | BookingFactory validation                         | Validates traveler data before creating bookings - shields service layer
+
+
+--------------------------------------------------------------------------------
+CREATIONAL DESIGN PATTERNS
+--------------------------------------------------------------------------------
+
+Pattern                    | Class / File                                      | How It's Applied
+---------------------------|---------------------------------------------------|--------------------------------------------------
+Factory Method             | BookingFactory.createBooking() (lines 22-43)      | Encapsulates complex Booking creation with validation in a dedicated method
+Factory Method             | PassengerFactory.createPassenger() (lines 11-26)  | Encapsulates Passenger creation at registration
+Factory Method             | TravelDocumentFactory.createCheckIn()             | Two factory methods for related travel document types (lines 15-30)
+                           | & createBoardingPass()                            |
+Factory Method             | TransactionFactory.createSuccessfulPayment()      | Separate factory methods for each transaction type
+                           | createInvoiceForBooking() / createRefund()        |
+Abstract Factory           | service/factory/ package as a whole               | Package acts as an abstract factory family - related factories for Bookings,
+                           |                                                   | Passengers, Notifications, Transactions, TravelDocuments
+Builder (implicit)         | TransactionFactory.createInvoiceForBooking()      | Builds Invoice step-by-step: calculates base fare, tax, then assembles (lines 33-43)
+Builder (implicit)         | BookingFactory                                    | Uses chained setters to assemble a complex Booking object with validation
+Singleton                  | All @Service / @Component classes                 | Spring manages one instance each: BookingService, AuthService, AdminService,
+                           |                                                   | ManagerService, NotificationService, AuditService, all factories
+Singleton                  | JwtUtil                                           | Spring singleton managing JWT token generation/validation
+Object Pool (implicit)     | SeatHold + expireSeatHolds() (lines 258-272)      | Pool of temporarily held seats with automatic expiration and release back to availability
+Object Pool (implicit)     | HikariCP (via Spring Data JPA)                    | Database connection pool managed transparently by the framework
+
+================================================================================

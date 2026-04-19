@@ -1,0 +1,117 @@
+================================================================================
+AeroDesk System Requirements Specification (SRS) - Administration Roles
+================================================================================
+
+This document provides a comprehensive breakdown of the Product Requirements 
+covering the three administrative tiers within the AeroDesk ecosystem: 
+Employee, Airport Manager, and System Admin (CEO).
+
+All users authenticate against the 'ad_users' table. The backend application 
+securely evaluates their 'role' column (EMPLOYEE, AIRPORT_MANAGER, or ADMIN) 
+via Spring Security (@PreAuthorize) before granting access to the logical 
+layers documented below.
+
+--------------------------------------------------------------------------------
+1. The Employee (EMPLOYEE)
+--------------------------------------------------------------------------------
+Context: Ground staff and front-desk agents responsible for day-to-day 
+interactions with individual Passengers. They do not have access to master 
+infrastructure or flight schedules.
+
+System Responsibilities & DB Operations:
+* Assisted Bookings (FR-2.3)
+  - Action: Create bookings on behalf of passengers at the counter.
+  - DB Implication: Performs INSERT operations into the 'ad_bookings' table 
+    mapping the User (Passenger ID) to a Flight ID. Also performs UPDATE on 
+    'ad_seats', changing is_available to FALSE for selected seats. 
+  - Requirements: Must collect exactly 5 traveler metadata payloads 
+    (travelerName, travelerEmail, travelerPhone, travelerGender, 
+    travelerDateOfBirth).
+
+* Counter Check-In & Boarding Passes (FR-9.2)
+  - Action: Manually check-in a passenger via their PNR (Booking Code) and 
+    assign a boarding pass.
+  - DB Implication: Performs an INSERT into the 'ad_checkins' table 
+    (Method: COUNTER), followed immediately by an INSERT into 
+    'ad_boarding_passes' generating a unique barcode syncing checkIn_id.
+
+* Refund Initiation (FR-8.4)
+  - Action: If a passenger requests a cancellation at the desk, the Employee 
+    can formulate a refund claim.
+  - DB Implication: Creates a block in 'ad_refunds' with the status 
+    actively constrained to REQUESTED. Employees cannot approve the refund.
+
+* Passenger CRM Lookup
+  - Action: Retrieve demographic and flight histories for passengers.
+  - DB Implication: Performs filtered SELECT queries strictly on the 
+    'ad_users' table where role='PASSENGER', cross-joined with 'ad_bookings'.
+
+--------------------------------------------------------------------------------
+2. The Airport Manager (AIRPORT_MANAGER)
+--------------------------------------------------------------------------------
+Context: Operational commanders who govern the logistical state of the airline. 
+They possess all Employee capabilities plus the ability to modify schedules, 
+resolve disruptions, and approve financial transactions.
+
+System Responsibilities & DB Operations:
+* Master Infrastructure Setup (FR-3.1, FR-3.2)
+  - Action: Provision new terminal locations or onboard new airplanes.
+  - DB Implication: Performs rigid INSERT operations into 'ad_airports' 
+    (enforcing unique IATA codes). Performs INSERT on 'ad_aircrafts' 
+    (enforcing unique registrationNumber), which recursively generates rows 
+    in 'ad_seats' linking the aircraft_id to combinations of First/Business/
+    Economy rows.
+
+* Flight Scheduling & Overlap Prevention (FR-4.1, FR-4.4)
+  - Action: Bind an Aircraft, Origin, Target, and timestamps together to 
+    create a search-indexable Flight.
+  - DB Implication: Performs an INSERT into 'ad_flights'. The JPA layer 
+    evaluates a constraint: if the aircraft_id already exists within the 
+    proposed departure_time & arrival_time blocks, a rigid 400 Bad Request 
+    Exception halts the schedule to prevent Double-Booking.
+
+* Disruption Management & Tracking (FR-5.3, FR-5.4)
+  - Action: Update the live flight board during logistics failures.
+  - DB Implication: Performs an UPDATE on 'ad_flights'. If the Manager 
+    changes the status enum to DELAYED or CANCELLED, the system mandates an 
+    exact String mapping into the status_reason column. (If CANCELLED, an 
+    asynchronous trigger sweeps ad_bookings to compute backend refunds).
+
+* Refund Authorization (FR-8.4)
+  - Action: Audits Employee-initiated refund queues.
+  - DB Implication: Performs an UPDATE on 'ad_refunds', mutating the status 
+    to APPROVED or REJECTED, logging the explicit rationale natively.
+
+* Targeted Broadcasts (FR-10.1)
+  - Action: Issue immediate disaster warnings to targeted roles.
+  - DB Implication: Runs burst INSERT records into 'ad_notifications' 
+    linking arbitrary message blocks to user IDs.
+
+--------------------------------------------------------------------------------
+3. CEO / System Admin (ADMIN)
+--------------------------------------------------------------------------------
+Context: The absolute highest tier of security and executive oversight. They 
+possess unbounded data aggregation capabilities.
+
+System Responsibilities & DB Operations:
+* Role-Based Access Control / Escalation (FR-1.6)
+  - Action: Elevate standard users into active administrative positions.
+  - DB Implication: Directly performs an UPDATE on the 'ad_users' mapping, 
+    overriding the native string inside the role enum.
+
+* Tamper-Proof Audit Traceability (FR-11.2)
+  - Action: View every restricted interaction performed across the network.
+  - DB Implication: Passively reads the 'ad_audit_logs' table. Every 
+    successful OR failed action automatically logs the ip_address, target 
+    entityId, the JSON action map, and the Success/Failure outcome.
+
+* Executive Analytics (FR-12.1)
+  - Action: Assess business financials and physical route performances.
+  - DB Implication: Triggers complex multi-table analytical functions 
+    (e.g., SUM(total_amount) across ad_bookings mapped to status='CONFIRMED').
+
+* Global Directory Lookup
+  - Action: Penetrate logical barriers to search any user data.
+  - DB Implication: Performs an unbounded SELECT query spanning the entire 
+    'ad_users' structure.
+================================================================================
